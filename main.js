@@ -100,7 +100,7 @@ function place(obj, theta, r = 78, y = 0) {
 
 function placeCraft() {
   if (!craft) return;
-  placeCraft();
+  place(craft, craftTheta, CRAFT_R);
   updateSyzygyGuide();
 }
 
