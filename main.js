@@ -1,18 +1,17 @@
 /**
  * SYZYGY — 404 Game Jam
- * Orbit · tether · syzygy locks · 6‑minute collapse
+ * Orbit · tether · syzygy locks · space bed · coach
  */
 import * as THREE from 'three';
 import { ASSET } from './assetlib.js';
+import { createSpaceAudio } from './audio.js';
+import { createSpaceBackdrop, createSunGlow } from './spacefx.js';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
-const VOID = 0x0b0b10;
-const BONE = 0xe6dcc8;
+const VOID = 0x05060c;
 
-const MATCH_DEG = 4;
-const MATCH_RAD = (MATCH_DEG * Math.PI) / 180;
-const MATCH_COS = Math.cos(MATCH_RAD);
+const MATCH_COS = Math.cos((4 * Math.PI) / 180);
 const GAME_SECS = 6 * 60;
 const WIN_LOCKS = 5;
 const TRAVEL_SECS = 2;
@@ -28,6 +27,14 @@ const STATE = {
 };
 
 const SPECTRAL = [0xff3355, 0xff8a3a, 0xffe066, 0x5ad67a, 0x6b8cff];
+
+const COACH = [
+  'Drag on the void to push your craft along its orbit.',
+  'Tap the amber‑marked relic to fire a filament.',
+  'Tap its twin (the other frozen relic) to tether both.',
+  'Drag until the two filaments lock through the sun (≤ 4°).',
+  'Light 5 stars before the sun dies. Hold the sun after 2 locks for a ghost hint.',
+];
 
 let state = STATE.BOOT;
 let renderer, scene, camera, craft, sun, sunLight;
@@ -52,13 +59,19 @@ let filaments = [];
 let ghost;
 let stars = [];
 let tunnels = [];
-let travel = null; // { t, from, to, look }
+let travel = null;
 let holdSunT = 0;
 let holdingSun = false;
 let spectralSeq = [];
 let secretFound = false;
 let tutorialDone = false;
 let sunScale = 1;
+let coachStep = 0;
+let movedOnce = false;
+let spacefx = null;
+let sunGlow = null;
+let audio = createSpaceAudio();
+let clockT = 0;
 
 const keys = { left: false, right: false };
 
@@ -73,6 +86,19 @@ function placeOnOrbit(obj, theta, radius, incl) {
 function setHud(msg) {
   const el = document.getElementById('hint');
   if (el) el.textContent = msg;
+}
+
+function setCoach(step) {
+  coachStep = Math.max(coachStep, step);
+  const stepEl = document.getElementById('coachStep');
+  if (stepEl) stepEl.textContent = COACH[Math.min(coachStep, COACH.length - 1)];
+  document.querySelectorAll('#coachList li').forEach((li) => {
+    const s = Number(li.dataset.step);
+    li.classList.toggle('done', s < coachStep);
+    li.classList.toggle('on', s === coachStep);
+  });
+  const coach = document.getElementById('coach');
+  if (coach && score >= WIN_LOCKS) coach.classList.add('hidden');
 }
 
 function setTimer(secLeft) {
@@ -98,9 +124,8 @@ function makeFilament(a, b, color = AMBER) {
   const geo = new THREE.BufferGeometry().setFromPoints([a.clone(), b.clone()]);
   const line = new THREE.Line(
     geo,
-    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 })
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75 })
   );
-  line.userData.ends = [a, b];
   scene.add(line);
   filaments.push(line);
   return line;
@@ -134,13 +159,11 @@ function alignedPair(a, b) {
 
 function findAligningPair() {
   if (tethered.length < 2) return null;
-  // Prefer tethered pair
   if (alignedPair(tethered[0], tethered[1])) return [tethered[0], tethered[1]];
   return null;
 }
 
 function bestNearAlign() {
-  // For hold-sun help: find two untethered relics closest to alignment
   let best = null;
   let bestAng = Infinity;
   for (let i = 0; i < relics.length; i++) {
@@ -170,15 +193,19 @@ function lightStar(color) {
     Math.cos(ph) * 220,
     Math.sin(ph) * Math.sin(th) * 220
   );
-  scene.add(star);
-  stars.push(star);
-
-  // Halo
   const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(2.6, 10, 8),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depth: false })
+    new THREE.SphereGeometry(2.8, 10, 8),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
   );
   star.add(halo);
+  scene.add(star);
+  stars.push(star);
 }
 
 function spawnTunnel(dir) {
@@ -188,9 +215,10 @@ function spawnTunnel(dir) {
     new THREE.MeshBasicMaterial({
       color: COLD,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.32,
       side: THREE.DoubleSide,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
     })
   );
   mesh.position.copy(dir.clone().multiplyScalar(len * 0.45));
@@ -214,20 +242,21 @@ function triggerSyzygy(a, b) {
   const dir = unitFromSun(mid);
   spawnTunnel(dir);
   lightStar(SPECTRAL[score % SPECTRAL.length]);
+  audio.stingLock();
 
   spectralSeq.push(a.userData.spectral);
   score += 1;
   setStarsHud();
   tutorialDone = true;
+  setCoach(4);
   a.userData.lockedWith = b;
   b.userData.lockedWith = a;
 
-  // Pulse materials
   for (const r of [a, b]) {
     r.traverse((n) => {
       if (n.isMesh && n.material && n.material.emissive) {
         n.material.emissive = new THREE.Color(COLD);
-        n.material.emissiveIntensity = 0.35;
+        n.material.emissiveIntensity = 0.4;
       }
     });
   }
@@ -239,12 +268,8 @@ function triggerSyzygy(a, b) {
   beginTravel(dir);
   setHud(score >= WIN_LOCKS ? 'Constellation complete' : `Syzygy ${score} · star ignited`);
 
-  if (score >= WIN_LOCKS) {
-    // Win after travel finishes
-    travel.winAfter = true;
-  }
+  if (score >= WIN_LOCKS) travel.winAfter = true;
 
-  // Secret: spectral order 0..4
   if (!secretFound && spectralSeq.length >= 5) {
     const last5 = spectralSeq.slice(-5);
     if (last5.every((v, i) => v === i)) {
@@ -258,7 +283,10 @@ function checkSyzygy() {
   if (state === STATE.LOCK || over || !started) return;
   const pair = findAligningPair();
   if (!pair) {
-    if (tethered.length === 2) setHud('Hold the line — drag until beams lock');
+    if (tethered.length === 2) {
+      setHud('Hold the line — drag until beams lock through the sun');
+      setCoach(3);
+    }
     return;
   }
   triggerSyzygy(pair[0], pair[1]);
@@ -274,15 +302,17 @@ function toggleTether(relic) {
     setHud(tethered.length ? 'One filament live · tap another relic' : 'Filament released');
     return;
   }
-  if (tethered.length >= 2) {
-    // Replace oldest
-    tethered.shift();
-  }
+  if (tethered.length >= 2) tethered.shift();
   tethered.push(relic);
   state = STATE.TETHER;
   refreshFilaments();
-  if (tethered.length === 1) setHud('Filament locked · tap a second relic');
-  else setHud('Two filaments · drag to align through the sun');
+  if (tethered.length === 1) {
+    setHud('Filament locked · tap a second relic');
+    setCoach(2);
+  } else {
+    setHud('Two filaments · drag to align through the sun');
+    setCoach(3);
+  }
   checkSyzygy();
 }
 
@@ -297,7 +327,6 @@ function pickObject(clientX, clientY) {
     while (o && !o.userData.isRelic) o = o.parent;
     if (o && o.userData.isRelic) return o;
   }
-  // Sun pick for hold-help
   if (sun) {
     const sunHits = raycaster.intersectObject(sun, true);
     if (sunHits.length) return sun;
@@ -311,32 +340,38 @@ async function boot() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(VOID);
-  scene.fog = new THREE.FogExp2(VOID, 0.0018);
+  scene.fog = new THREE.FogExp2(0x070914, 0.00135);
 
-  camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 900);
+  camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.5, 1000);
   camera.position.set(0, 48, 135);
 
   raycaster = new THREE.Raycaster();
-  raycaster.params.Line = { threshold: 0.5 };
   pointerNdc = new THREE.Vector2();
 
-  scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.5));
-  sunLight = new THREE.PointLight(AMBER, 2.4, 450);
+  spacefx = createSpaceBackdrop(scene, { amber: AMBER, cold: COLD });
+
+  scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.45));
+  sunLight = new THREE.PointLight(AMBER, 3.2, 520);
   sunLight.position.set(0, 8, 0);
   scene.add(sunLight);
-  const rim = new THREE.DirectionalLight(COLD, 0.7);
+  const rim = new THREE.DirectionalLight(COLD, 0.85);
   rim.position.set(50, 70, -40);
   scene.add(rim);
+  const fill = new THREE.DirectionalLight(AMBER, 0.25);
+  fill.position.set(-40, 20, 60);
+  scene.add(fill);
 
   const ecliptic = new THREE.Mesh(
-    new THREE.RingGeometry(28, 145, 64),
+    new THREE.RingGeometry(32, 150, 96),
     new THREE.MeshBasicMaterial({
-      color: 0x152033,
+      color: 0x1a2744,
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.18,
       side: THREE.DoubleSide,
       depthWrite: false,
     })
@@ -344,29 +379,13 @@ async function boot() {
   ecliptic.rotation.x = -Math.PI / 2;
   scene.add(ecliptic);
 
-  const dust = new THREE.Points(
-    (() => {
-      const n = 500;
-      const pos = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = 32 + Math.random() * 120;
-        pos[i * 3] = Math.cos(a) * r;
-        pos[i * 3 + 1] = (Math.random() - 0.25) * 48;
-        pos[i * 3 + 2] = Math.sin(a) * r;
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      return g;
-    })(),
-    new THREE.PointsMaterial({ color: COLD, size: 0.55, transparent: true, opacity: 0.5, size: false })
-  );
-  scene.add(dust);
-
   sun = await ASSET('./assets/dying_sun.js', { height: 40 });
   sun.position.set(0, 0, 0);
   sun.userData.isSun = true;
   scene.add(sun);
+
+  sunGlow = createSunGlow(AMBER);
+  scene.add(sunGlow);
 
   craft = await ASSET('./assets/cartographer_craft.js', { height: 0.7 });
   placeOnOrbit(craft, orbitTheta, orbitRadius, orbitInclination);
@@ -381,25 +400,15 @@ async function boot() {
     ['./assets/observatory_oculus.js', 5],
   ];
 
-  // Minute‑1 pair: nearly colinear with sun (forced first syzygy)
   const tutorialBase = 0.85;
   for (let i = 0; i < 12; i++) {
     const [file, h] = relicFiles[i % relicFiles.length];
     const relic = await ASSET(file, { height: h });
-    let th;
-    let r;
-    let incl;
-    let ω;
+    let th, r, incl, ω;
     if (i === 0) {
-      th = tutorialBase;
-      r = 58;
-      incl = 0.05;
-      ω = 0;
+      th = tutorialBase; r = 58; incl = 0.05; ω = 0;
     } else if (i === 1) {
-      th = tutorialBase + 0.035; // ~2° — inside 4° cone
-      r = 92;
-      incl = 0.06;
-      ω = 0;
+      th = tutorialBase + 0.035; r = 92; incl = 0.06; ω = 0;
     } else {
       th = (i / 12) * Math.PI * 2 + 1.2;
       r = 48 + (i % 4) * 16;
@@ -416,8 +425,14 @@ async function boot() {
   }
 
   ghost = new THREE.Mesh(
-    new THREE.SphereGeometry(2.2, 12, 10),
-    new THREE.MeshBasicMaterial({ color: AMBER, transparent: true, opacity: 0.4, depth: false })
+    new THREE.SphereGeometry(2.4, 12, 10),
+    new THREE.MeshBasicMaterial({
+      color: AMBER,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
   );
   ghost.position.copy(relics[0].position);
   scene.add(ghost);
@@ -430,7 +445,8 @@ async function boot() {
   publishGame();
 
   document.getElementById('load')?.classList.add('gone');
-  setHud('Drag to orbit · tap relics to tether');
+  setHud('Follow the HOWTO panel');
+  setCoach(0);
   setStarsHud();
   setTimer(GAME_SECS);
   requestAnimationFrame(frame);
@@ -444,18 +460,20 @@ function start() {
   playElapsed = 0;
   document.getElementById('start')?.classList.remove('on');
   document.getElementById('hud')?.classList.add('on');
-  setHud('Tap the amber‑marked relic, then its twin');
+  setHud('Drag to move · then tap the amber relic');
+  setCoach(0);
   refreshFilaments();
+  audio.start();
 }
 
 function endWin() {
   over = true;
   state = STATE.WIN;
-  window.__GAME__ && (window.__GAME__.over = true);
   document.getElementById('win')?.classList.add('on');
   document.getElementById('winSub').textContent = secretFound
     ? 'The constellation speaks its true name: 404‑AURIGA'
     : 'Five stars burn. The orrery remembers.';
+  document.getElementById('coach')?.classList.add('hidden');
   setHud('Victory');
 }
 
@@ -463,6 +481,7 @@ function endCollapse() {
   over = true;
   state = STATE.COLLAPSE;
   document.getElementById('lose')?.classList.add('on');
+  document.getElementById('coach')?.classList.add('hidden');
   setHud('The sun folds inward');
 }
 
@@ -490,9 +509,7 @@ function bindInput(canvas) {
     holdingSun = false;
     holdSunT = 0;
     const hit = pickObject(lastPtr.x, lastPtr.y);
-    if (hit && hit.userData && hit.userData.isSun && score >= 2) {
-      holdingSun = true;
-    }
+    if (hit && hit.userData && hit.userData.isSun && score >= 2) holdingSun = true;
     e.preventDefault();
   };
 
@@ -504,6 +521,11 @@ function bindInput(canvas) {
     if (Math.abs(dx) + Math.abs(dy) > 6) {
       dragMoved = true;
       holdingSun = false;
+      if (!movedOnce) {
+        movedOnce = true;
+        setCoach(1);
+        setHud('Good — now tap the amber‑marked relic');
+      }
     }
     lastPtr = p;
     orbitTheta += dx * 0.0045;
@@ -523,6 +545,7 @@ function bindInput(canvas) {
     if (!dragMoved && !over && state !== STATE.LOCK) {
       const hit = pickObject(p.x, p.y);
       if (hit && hit.userData && hit.userData.isRelic) {
+        if (coachStep < 1) setCoach(1);
         toggleTether(hit);
       } else if (wasHold && held >= HOLD_SUN && score >= 2) {
         const pair = bestNearAlign();
@@ -551,12 +574,11 @@ function bindInput(canvas) {
     if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
   });
 
-  const startBtn = document.getElementById('btnStart');
-  startBtn?.addEventListener('click', (e) => {
+  document.getElementById('btnStart')?.addEventListener('click', (e) => {
     e.preventDefault();
     start();
   });
-  startBtn?.addEventListener(
+  document.getElementById('btnStart')?.addEventListener(
     'touchend',
     (e) => {
       e.preventDefault();
@@ -564,7 +586,6 @@ function bindInput(canvas) {
     },
     { passive: false }
   );
-
   document.getElementById('btnAgain')?.addEventListener('click', () => location.reload());
   document.getElementById('btnAgainLose')?.addEventListener('click', () => location.reload());
 }
@@ -589,27 +610,27 @@ function frame(now) {
   fps = 1 / (rawDt || 0.016);
   const dt = Math.min(0.05, Math.max(0.001, rawDt));
   lastT = now;
+  clockT += dt;
+
+  if (spacefx) spacefx.update(dt, clockT);
 
   if (started && !over) {
     playElapsed += dt;
     const left = GAME_SECS - playElapsed;
     setTimer(left);
-
-    // Sun dies visually
     const life = Math.max(0, left / GAME_SECS);
     sunScale = 0.55 + life * 0.45;
     if (sun) sun.scale.setScalar(sunScale);
-    if (sunLight) sunLight.intensity = 0.6 + life * 2.0;
-    if (sunLight) sunLight.color.setHex(life > 0.35 ? AMBER : 0x8b3a1a);
-
-    if (left <= 0 && state !== STATE.LOCK) {
-      endCollapse();
+    if (sunGlow) sunGlow.scale.setScalar(sunScale);
+    if (sunLight) {
+      sunLight.intensity = 0.8 + life * 2.6;
+      sunLight.color.setHex(life > 0.35 ? AMBER : 0x8b3a1a);
     }
+    audio.setTension(1 - life);
+    if (left <= 0 && state !== STATE.LOCK) endCollapse();
   }
 
-  if (holdingSun && score >= 2) {
-    holdSunT += dt;
-  }
+  if (holdingSun && score >= 2) holdSunT += dt;
 
   if (started && !over && state !== STATE.LOCK) {
     if (keys.left) orbitTheta -= 0.95 * dt;
@@ -632,11 +653,10 @@ function frame(now) {
     placeOnOrbit(r, orb.th, orb.r, orb.incl);
   }
 
-  if (ghost && ghost.visible) {
-    if (!tutorialDone && relics[0]) ghost.position.copy(relics[0].position);
+  if (ghost && ghost.visible && !tutorialDone && relics[0]) {
+    ghost.position.copy(relics[0].position);
   }
 
-  // Update live filament endpoints without reallocating
   if (filaments.length && craft) {
     let fi = 0;
     for (const r of tethered) {
@@ -665,7 +685,6 @@ function frame(now) {
 
   if (tethered.length === 2 && state !== STATE.LOCK) checkSyzygy();
 
-  // Camera
   if (travel) {
     travel.t += dt / TRAVEL_SECS;
     const u = Math.min(1, travel.t);
@@ -679,7 +698,6 @@ function frame(now) {
       else if (!over) {
         state = tethered.length ? STATE.TETHER : STATE.ORBIT;
         if (score < WIN_LOCKS) setHud('Find the next alignment · tap two relics');
-        // Unfreeze tutorial relics' siblings for later motion
         for (const r of relics) {
           if (r.userData.orbit && r.userData.orbit.frozen) {
             r.userData.orbit.frozen = false;
@@ -692,6 +710,7 @@ function frame(now) {
     camera.position.lerp(new THREE.Vector3(0, 20, 60), 1 - Math.exp(-1.5 * dt));
     camera.lookAt(0, 0, 0);
     if (sun) sun.scale.multiplyScalar(Math.max(0.92, 1 - dt * 0.8));
+    if (sunGlow) sunGlow.scale.copy(sun.scale);
   } else if (craft) {
     const target = craft.position.clone();
     const back = target.clone().normalize().multiplyScalar(42);
