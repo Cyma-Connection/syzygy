@@ -40,6 +40,7 @@ let targetObj = null;
 let targetAlive = false;
 let targetLife = 0;
 let targetMaxLife = 4;
+let failing = false;
 let align = 0; // 0..1
 let zoom = 1; // pinch
 let camDist = 120;
@@ -187,6 +188,7 @@ function spawnTarget(){
   const side = Math.random() < 0.5 ? 1 : -1;
   targetTheta = aimTheta + side * (0.9 + Math.random()*0.7);
   targetSpeed = p.speed * side * -1; // move toward aim
+  failing = false;
   targetAlive = true;
   targetMaxLife = Math.max(1.6, 4.2 - wave * 0.18);
   targetLife = targetMaxLife;
@@ -195,6 +197,8 @@ function spawnTarget(){
 }
 
 function failLife(reason){
+  if (failing || over || !targetAlive) return;
+  failing = true;
   lives -= 1;
   combo = 0;
   audio.stingMiss();
@@ -204,7 +208,7 @@ function failLife(reason){
   if (targetObj) targetObj.visible = false;
   targetAlive = false;
   if (lives <= 0) endRun();
-  else setTimeout(spawnTarget, 500);
+  else setTimeout(() => { failing = false; spawnTarget(); }, 500);
 }
 
 function doSnap(){
