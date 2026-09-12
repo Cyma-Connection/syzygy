@@ -740,6 +740,22 @@ function endRun() {
       if (!nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0, 12);
       setTimeout(() => nameIn.focus(), 50);
     }
+    // Machine playtest: claim the board as Bot 404 when beating local top
+    if (botOn) {
+      const top = loadLocal()[0];
+      const beat = !top || score >= (top.score || 0);
+      if (beat) {
+        if (nameIn) nameIn.value = 'Bot 404';
+        localStorage.setItem('syzygy_tag', 'Bot 404');
+        saveLocal('Bot 404', score, wave);
+        renderOverRanks({ saved: true });
+        const btn = $('btnSubmit');
+        if (btn) btn.textContent = t('saved');
+        console.info('[SYZYGY] bot saved record as Bot 404', score, 'wave', wave);
+      } else {
+        console.info('[SYZYGY] bot score', score, 'did not beat', top?.score);
+      }
+    }
     publishGame();
   }, 1100);
 }
@@ -891,7 +907,10 @@ async function boot() {
   window.__READY__ = true;
   window.__START__ = startRun;
   botOn = /(?:\?|&)bot=1(?:&|$)/.test(location.search) || location.hash === '#bot';
-  if (botOn) console.info('[SYZYGY] bot playtest ON');
+  if (botOn) {
+    console.info('[SYZYGY] bot playtest ON');
+    localStorage.setItem('syzygy_coach_v1', '1');
+  }
   publishGame();
 
   applyDom();
@@ -1061,6 +1080,9 @@ function tickBot() {
 
 function publishGame() {
   const info = renderer ? renderer.info.render : { calls: 0, triangles: 0 };
+  if (botOn) {
+    document.title = `BOT w${wave} sc${score} lv${lives} spd${(Math.abs(orbitSpeed)*40)|0} ${over?'OVER':'PLAY'} tr${audio.transposeSemis?.() ?? '?'}`;
+  }
   window.__GAME__ = {
     pos: craft ? [craft.position.x, craft.position.z] : [0, 0],
     fps,
