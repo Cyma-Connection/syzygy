@@ -19,6 +19,11 @@ const BAD = 0xff4d6a;
 
 const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', OVER: 'OVER' };
 const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris' };
+/** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
+const CRAFT_R = 95;
+const INNER_MIN = 42;
+const INNER_MAX = 82; // always < CRAFT_R so object is on sun→craft segment
+
 
 let renderer, scene, camera, craft, sun, sunLight, sunGlow, spacefx, vfx;
 let audio = createSpaceAudio();
@@ -58,6 +63,7 @@ let heatOn = false;
 let isBossWave = false;
 let sunScale = 1;
 let sunBaseScale = 1;
+let syzygyGuide = null;
 
 let autoAlignReady = false;
 let autoAlignActive = false;
@@ -90,6 +96,12 @@ function angDiff(a, b) {
 function place(obj, theta, r = 78, y = 0) {
   obj.position.set(Math.cos(theta) * r, y, Math.sin(theta) * r);
   obj.lookAt(0, 0, 0);
+}
+
+function placeCraft() {
+  if (!craft) return;
+  placeCraft();
+  updateSyzygyGuide();
 }
 
 function waveParams(w) {
@@ -270,7 +282,7 @@ function spawnWaveField() {
   if (isBossWave) {
     const boss = makeObject(KIND.RELIC, true);
     boss.theta = craftTheta + Math.PI * 0.85;
-    boss.radius = 92;
+    boss.radius = 68; // between sun and craft
     boss.y = 0;
     place(boss.mesh, boss.theta, boss.radius, boss.y);
     world.push(boss);
@@ -291,7 +303,7 @@ function spawnWaveField() {
     } while (tries < 12 && usedAngles.some((a) => angDiff(a, theta) < 0.35));
     usedAngles.push(theta);
     o.theta = theta;
-    o.radius = 58 + Math.random() * 45 + (kind === KIND.DEBRIS ? Math.random() * 10 : 0);
+    o.radius = INNER_MIN + Math.random() * (INNER_MAX - INNER_MIN);
     o.y = (Math.random() - 0.5) * 10;
     place(o.mesh, o.theta, o.radius, o.y);
     world.push(o);
@@ -304,7 +316,7 @@ function refillObject() {
   const kind = isBossWave && Math.random() < 0.5 ? KIND.DEBRIS : pickKind(false);
   const o = makeObject(kind, false);
   o.theta = craftTheta + Math.PI * (0.7 + Math.random() * 0.6) * (Math.random() < 0.5 ? 1 : -1);
-  o.radius = 60 + Math.random() * 48;
+  o.radius = INNER_MIN + Math.random() * (INNER_MAX - INNER_MIN);
   o.y = (Math.random() - 0.5) * 10;
   place(o.mesh, o.theta, o.radius, o.y);
   world.push(o);
@@ -321,11 +333,39 @@ function removeObject(o) {
   }
 }
 
+
+function updateSyzygyGuide() {
+  if (!syzygyGuide || !craft) return;
+  const pos = craft.position;
+  const arr = syzygyGuide.geometry.attributes.position.array;
+  arr[0] = 0; arr[1] = 0.2; arr[2] = 0;
+  arr[3] = pos.x; arr[4] = pos.y; arr[5] = pos.z;
+  syzygyGuide.geometry.attributes.position.needsUpdate = true;
+  const a = align;
+  const mat = syzygyGuide.material;
+  if (bestTarget && bestTarget.kind === KIND.DEBRIS && a > 0.5) {
+    mat.color.setHex(BAD);
+    mat.opacity = 0.15 + a * 0.55;
+  } else if (a > 0.45) {
+    mat.color.setHex(a >= goodBand(wave) ? GOOD : COLD);
+    mat.opacity = 0.12 + (a - 0.45) * 0.9;
+  } else {
+    mat.opacity = Math.max(0.04, a * 0.12);
+    mat.color.setHex(COLD);
+  }
+}
+
+function isBetweenSunAndCraft(o) {
+  // True syzygy segment: sun (origin) → object → craft
+  return o.radius > INNER_MIN * 0.5 && o.radius < CRAFT_R - 2;
+}
+
 function computeAlignment() {
   bestTarget = null;
   let best = 0;
   const soft = waveParams(wave).soft + 0.22;
   for (const o of world) {
+    if (!isBetweenSunAndCraft(o)) continue;
     const d = angDiff(craftTheta, o.theta);
     const q = Math.max(0, 1 - d / soft);
     if (q > best) {
@@ -343,6 +383,7 @@ function stackBonus(primary) {
   const tags = [];
   for (const o of world) {
     if (o === primary || o.kind === KIND.DEBRIS) continue;
+    if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) {
       if (o.kind === KIND.PLANET) { bonus += 0.5; tags.push('PLANET'); }
       if (o.kind === KIND.STAR) { bonus += 0.75; tags.push('STAR'); }
@@ -377,7 +418,7 @@ function doSnap() {
   const target = bestTarget;
 
   if (!target || align < 0.45) {
-    failLife(align < 0.2 ? 'RIEN ALIGNÉ' : 'TROP FAIBLE');
+    failLife(align < 0.2 ? 'NO SYZYGY' : 'WEAK ALIGN');
     return;
   }
 
@@ -438,6 +479,7 @@ function doSnap() {
   const toRemove = [target];
   for (const o of world) {
     if (o === target || o.kind === KIND.DEBRIS) continue;
+    if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) toRemove.push(o);
   }
   for (const o of toRemove) removeObject(o);
@@ -533,6 +575,7 @@ function tickAutoAlign(dt) {
   let bestD = 99;
   for (const o of world) {
     if (o.kind === KIND.DEBRIS) continue;
+    if (!isBetweenSunAndCraft(o)) continue;
     const d = angDiff(craftTheta, o.theta);
     if (d < bestD) { bestD = d; best = o; }
   }
@@ -744,8 +787,22 @@ async function boot() {
       n.material.emissiveIntensity = 0.18;
     }
   });
-  place(craft, craftTheta, 95);
+  placeCraft();
   scene.add(craft);
+
+  // Thin sun→craft ray so players can read true syzygy
+  {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(CRAFT_R, 0, 0),
+    ]);
+    syzygyGuide = new THREE.Line(g, new THREE.LineBasicMaterial({
+      color: COLD, transparent: true, opacity: 0.0, depthWrite: false,
+    }));
+    syzygyGuide.frustumCulled = false;
+    scene.add(syzygyGuide);
+  }
+
 
   for (const [file, h] of relicFiles) {
     const r = await ASSET(file, { height: h });
@@ -949,7 +1006,7 @@ function frame(now) {
     updateHud();
   }
 
-  place(craft, craftTheta, 95);
+  placeCraft();
 
   const aimLine = window.__aimLine;
   if (aimLine) {
@@ -975,7 +1032,7 @@ function frame(now) {
   if (camera) {
     // Rail / cockpit framing: craft stays bottom-center; world sweeps past.
     // Camera sits outside the craft orbit looking inward (+ slight look-ahead).
-    const craftR = 95;
+    const craftR = CRAFT_R;
     const z = THREE.MathUtils.clamp(zoom, 0.55, 1.85);
     // zoom↑ = pull back + wider FOV to anticipate orbit ahead
     const out = 18 + z * 48;          // radial distance beyond craft
