@@ -137,6 +137,12 @@
     #lb table { width:100%; border-collapse:collapse; }
     #lb td { padding:4px 6px; border-bottom:1px solid rgba(255,255,255,.06); }
     #lb td:nth-child(2){ color:var(--amber); text-align:right; }
+    .overLb { max-height:28vh; overflow:auto; width:min(340px,90vw); text-align:left; font-size:11px;
+      letter-spacing:.06em; color:#9aa3b5; margin:4px 0 8px; }
+    .overLb table { width:100%; border-collapse:collapse; }
+    .overLb td { padding:4px 6px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .overLb td:nth-child(2){ color:var(--amber); text-align:right; }
+    .overLb tr.you td { color:var(--good); font-weight:600; }
     input#nameIn { pointer-events:auto; background:rgba(0,0,0,.4); border:1px solid #445; color:#eee;
       padding:10px 12px; font:inherit; letter-spacing:.12em; width:min(220px,70vw); text-align:center; }
   </style>
@@ -173,6 +179,8 @@
   <div id="over" class="screen">
     <h2 id="overTitle">RUN OVER</h2>
     <p id="overSub">Score 0</p>
+    <p id="overRankNote" style="font-size:10px;letter-spacing:.12em;color:#7a8494;margin:0">YOUR RUN · LOCAL RANKS</p>
+    <div id="overLb" class="overLb"><em>…</em></div>
     <input id="nameIn" maxlength="12" placeholder="YOUR TAG" autocomplete="off" enterkeyhint="done" />
     <div class="row">
       <button class="btn primary" id="btnSubmit">SAVE</button>

@@ -590,14 +590,27 @@ function maybeAdvanceWave() {
 }
 
 function applySunGrowth() {
-  if (sun) sun.scale.setScalar(sunBaseScale * sunScale);
+  const s = sunBaseScale * sunScale;
+  if (sun) {
+    sun.scale.setScalar(s);
+    // Whole star brighter — emissive on every sun mesh (uniform, no odd shell blob)
+    sun.traverse((n) => {
+      if (!n.isMesh || !n.material) return;
+      const mats = Array.isArray(n.material) ? n.material : [n.material];
+      for (const m of mats) {
+        if (m.emissiveIntensity == null) continue;
+        if (m.userData.baseEmissive == null) m.userData.baseEmissive = m.emissiveIntensity;
+        m.emissiveIntensity = m.userData.baseEmissive * (0.85 + sunScale * 0.55);
+      }
+    });
+  }
   if (sunGlow) {
+    sunGlow.scale.setScalar(s);
     growSun?.(sunGlow, sunScale);
-    sunGlow.scale.setScalar(sunScale);
   }
   if (sunLight) {
-    sunLight.intensity = 2.8 + (sunScale - 1) * 2.2;
-    sunLight.distance = 560 + (sunScale - 1) * 120;
+    sunLight.intensity = 2.6 + (sunScale - 1) * 2.8;
+    sunLight.distance = 560 + (sunScale - 1) * 160;
   }
 }
 
@@ -721,6 +734,7 @@ function endRun() {
   setTimeout(() => {
     $('over')?.classList.add('on');
     setText('overSub', t('overSub', score, wave, bestCombo));
+    renderOverRanks();
     const nameIn = $('nameIn');
     if (nameIn) {
       if (!nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0, 12);
@@ -769,12 +783,15 @@ async function boot() {
   scene.add(aimLine);
   window.__aimLine = aimLine;
 
-  sun = await ASSET('./assets/dying_sun.js', { height: 36 });
-  // ASSET sits models on the ground — re-center so the star is AT the origin (no floating ball above)
   {
-    const box = new THREE.Box3().setFromObject(sun);
+    // ASSET floors models (pivot at bottom). Wrap so scale grows around TRUE center — whole star, no upward blob.
+    const raw = await ASSET('./assets/dying_sun.js', { height: 36 });
+    const box = new THREE.Box3().setFromObject(raw);
     const c = box.getCenter(new THREE.Vector3());
-    sun.position.sub(c);
+    raw.position.sub(c);
+    sun = new THREE.Group();
+    sun.add(raw);
+    sun.position.set(0, 0, 0);
   }
   sun.userData.isSun = true;
   sunBaseScale = 1;
@@ -967,7 +984,28 @@ function bindInput(canvas) {
       console.warn(err);
       $('btnSubmit').textContent = t('localSaved');
     }
+    renderOverRanks();
   });
+}
+
+function renderOverRanks() {
+  const el = $('overLb');
+  if (!el) return;
+  const note = $('overRankNote');
+  if (note) note.textContent = t('overRankNote');
+  const rows = loadLocal();
+  // Preview: insert this run (unsaved) so player sees where they land
+  const preview = [...rows, { name: 'YOU', score, wave, _you: true }];
+  preview.sort((a, b) => b.score - a.score);
+  const top = preview.slice(0, 12);
+  if (!top.length) {
+    el.innerHTML = `<em>${t('lbEmpty')}</em>`;
+    return;
+  }
+  el.innerHTML = `<table>${top.map((r, i) => {
+    const you = r._you || r.name === 'YOU';
+    return `<tr class="${you ? 'you' : ''}"><td>${i + 1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`;
+  }).join('')}</table>`;
 }
 
 function openBoard() {

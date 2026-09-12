@@ -39,6 +39,7 @@ const STR = {
     wave: (n) => `WAVE ${n}`,
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'FR',
+    overRankNote: 'YOUR RUN · LOCAL RANKS',
     hull: 'HULL',
   },
   fr: {
@@ -80,6 +81,7 @@ const STR = {
     wave: (n) => `VAGUE ${n}`,
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'EN',
+    overRankNote: 'TA RUN · CLASSEMENT LOCAL',
     hull: 'COQUE',
   },
 };
@@ -125,6 +127,7 @@ export function applyDom() {
   set('overTitle', t('runOver'));
   set('btnSubmit', t('save'));
   set('btnRetry', t('again'));
+  set('overRankNote', t('overRankNote'));
   set('meterLabel', t('meter'));
   set('heatBadge', t('heat'));
   set('livesLabel', t('hull'));

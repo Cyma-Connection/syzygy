@@ -173,12 +173,11 @@ export function createSunGlow(amber = 0xe8a04a) {
 /** Scale / brighten sun glow shells for persistent wave growth. */
 export function growSun(glowGroup, scale = 1) {
   if (!glowGroup) return;
-  glowGroup.scale.setScalar(scale);
+  // Scale is applied by caller on the whole group (uniform). Here: brightness only.
   glowGroup.traverse((n) => {
     if (n.isMesh && n.material && n.material.opacity != null) {
-      // gently brighten outer shells
       if (!n.userData.baseOpacity) n.userData.baseOpacity = n.material.opacity;
-      n.material.opacity = Math.min(0.55, n.userData.baseOpacity * (0.85 + scale * 0.35));
+      n.material.opacity = Math.min(0.5, n.userData.baseOpacity * (0.9 + (scale - 1) * 0.45));
     }
   });
 }
