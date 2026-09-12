@@ -15,6 +15,7 @@ const STR = {
     namePh: 'YOUR TAG',
     save: 'SAVE',
     again: 'AGAIN',
+    menu: 'MENU',
     saving: 'SAVING…',
     saved: 'SAVED ✓',
     localSaved: 'LOCAL SAVED',
@@ -57,6 +58,7 @@ const STR = {
     namePh: 'TON NOM',
     save: 'SAUVER',
     again: 'ENCORE',
+    menu: 'MENU',
     saving: 'SAUVEGARDE…',
     saved: 'SAUVÉ ✓',
     localSaved: 'SAUVÉ LOCAL',
@@ -127,6 +129,7 @@ export function applyDom() {
   set('overTitle', t('runOver'));
   set('btnSubmit', t('save'));
   set('btnRetry', t('again'));
+  set('btnMenu', t('menu'));
   set('overRankNote', t('overRankNote'));
   set('meterLabel', t('meter'));
   set('heatBadge', t('heat'));

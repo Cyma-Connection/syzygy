@@ -705,6 +705,26 @@ function tickAutoAlign(dt) {
   }
 }
 
+
+function goToMenu() {
+  over = true;
+  started = false;
+  endingCinematic = false;
+  state = STATE.BOOT;
+  $('hud')?.classList.remove('on');
+  $('over')?.classList.remove('on');
+  $('board')?.classList.remove('on');
+  $('coachFlow')?.classList.remove('on');
+  $('start')?.classList.add('on');
+  clearWorld?.();
+  if (craft) craft.visible = true;
+  if (sun) sun.visible = true;
+  if (sunGlow) sunGlow.visible = true;
+  sunScale = 1;
+  applySunGrowth?.();
+  publishGame();
+}
+
 function startRun() {
   if (started && !over && state === STATE.PLAY) return;
   score = 0; wave = 1; lives = 5; combo = 0; bestCombo = 0; snapsInWave = 0;
@@ -1031,6 +1051,7 @@ function bindInput(canvas) {
   });
   $('btnStart')?.addEventListener('click', () => startRun());
   $('btnRetry')?.addEventListener('click', () => startRun());
+  $('btnMenu')?.addEventListener('click', () => goToMenu());
   $('btnLb')?.addEventListener('click', () => openBoard());
   $('btnBack')?.addEventListener('click', () => {
     $('board')?.classList.remove('on');
