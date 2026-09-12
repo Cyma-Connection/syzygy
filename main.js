@@ -1,769 +1,469 @@
 /**
- * SYZYGY — 404 Game Jam
- * Orbit · tether · syzygy locks · space bed · coach
+ * SYZYGY SNAP — arcade alignment for 404 Game Jam
  */
 import * as THREE from 'three';
 import { ASSET } from './assetlib.js';
 import { createSpaceAudio } from './audio.js';
 import { createSpaceBackdrop, createSunGlow } from './spacefx.js';
 import { createVfx } from './vfx.js';
+import { loadLocal, saveLocal, fetchGlobal, submitGlobal } from './leaderboard.js';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
-const VOID = 0x05060c;
+const VOID = 0x04050a;
+const GOOD = 0x5ad67a;
 
-const MATCH_COS = Math.cos((4 * Math.PI) / 180);
-const GAME_SECS = 6 * 60;
-const WIN_LOCKS = 5;
-const TRAVEL_SECS = 2;
-const HOLD_SUN = 0.6;
+const STATE = { BOOT:'BOOT', PLAY:'PLAY', OVER:'OVER' };
 
-const STATE = {
-  BOOT: 'BOOT',
-  ORBIT: 'ORBIT',
-  TETHER: 'TETHER',
-  LOCK: 'LOCK',
-  COLLAPSE: 'COLLAPSE',
-  WIN: 'WIN',
-};
-
-const SPECTRAL = [0xff3355, 0xff8a3a, 0xffe066, 0x5ad67a, 0x6b8cff];
-
-const COACH = [
-  'Drag on the void to push your craft along its orbit.',
-  'Tap the amber‑marked relic to fire a filament.',
-  'Tap its twin (the other frozen relic) to tether both.',
-  'Drag until the two filaments lock through the sun (≤ 4°).',
-  'Light 5 stars before the sun dies. Hold the sun after 2 locks for a ghost hint.',
-];
-
+let renderer, scene, camera, craft, sun, sunLight, sunGlow, spacefx, vfx;
+let raycaster;
+let audio = createSpaceAudio();
 let state = STATE.BOOT;
-let renderer, scene, camera, craft, sun, sunLight;
-let raycaster, pointerNdc;
-let orbitTheta = 0.2;
-let orbitRadius = 72;
-let orbitInclination = 0.1;
-let dragging = false;
-let dragMoved = false;
-let lastPtr = null;
-let ptrDownAt = 0;
-let score = 0;
+let started = false;
 let over = false;
-let speed = 0;
+
+let score = 0;
+let wave = 1;
+let lives = 3;
+let combo = 0;
+let bestCombo = 0;
+let snapsInWave = 0;
+let playElapsed = 0;
 let lastT = performance.now();
 let fps = 60;
-let started = false;
-let playElapsed = 0;
-let relics = [];
-let tethered = [];
-let filaments = [];
-let ghost;
-let stars = [];
-let tunnels = [];
-let travel = null;
-let holdSunT = 0;
-let holdingSun = false;
-let spectralSeq = [];
-let secretFound = false;
-let tutorialDone = false;
-let sunScale = 1;
-let coachStep = 0;
-let movedOnce = false;
-let spacefx = null;
-let sunGlow = null;
-let vfx = null;
-let alignHeat = 0;
-let audio = createSpaceAudio();
 let clockT = 0;
 
-const keys = { left: false, right: false };
+let aimTheta = 0.4;
+let targetTheta = 0.4;
+let targetSpeed = 0.55;
+let targetObj = null;
+let targetAlive = false;
+let targetLife = 0;
+let targetMaxLife = 4;
+let align = 0; // 0..1
+let zoom = 1; // pinch
+let camDist = 120;
 
-function placeOnOrbit(obj, theta, radius, incl) {
-  const x = Math.cos(theta) * radius;
-  const z = Math.sin(theta) * radius;
-  const y = Math.sin(theta * 1.7) * radius * incl * 0.4;
-  obj.position.set(x, y, z);
-  obj.lookAt(0, 0, 0);
+let dragging = false;
+let lastPtr = null;
+let pointers = new Map(); // pinch
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+
+const relicFiles = [
+  ['./assets/hollow_moon.js', 6],
+  ['./assets/broken_ring.js', 1.2],
+  ['./assets/fossil_comet.js', 2.5],
+  ['./assets/neutron_heart.js', 2.2],
+  ['./assets/gravity_bell.js', 6],
+  ['./assets/observatory_oculus.js', 5],
+];
+let relicPool = [];
+
+function $(id){ return document.getElementById(id); }
+function setText(id, t){ const el=$(id); if(el) el.textContent=t; }
+
+function place(obj, theta, r=78, y=0){
+  obj.position.set(Math.cos(theta)*r, y, Math.sin(theta)*r);
+  obj.lookAt(0,0,0);
 }
 
-function setHud(msg) {
-  const el = document.getElementById('hint');
-  if (el) el.textContent = msg;
+function waveParams(w){
+  return {
+    speed: 0.45 + w * 0.08,
+    window: Math.max(0.08, 0.28 - w * 0.015), // align threshold softness
+    perWave: 5,
+    decoyChance: Math.min(0.45, 0.05 * w),
+  };
 }
 
-function setCoach(step) {
-  coachStep = Math.max(coachStep, step);
-  const stepEl = document.getElementById('coachStep');
-  if (stepEl) stepEl.textContent = COACH[Math.min(coachStep, COACH.length - 1)];
-  document.querySelectorAll('#coachList li').forEach((li) => {
-    const s = Number(li.dataset.step);
-    li.classList.toggle('done', s < coachStep);
-    li.classList.toggle('on', s === coachStep);
-  });
-  const coach = document.getElementById('coach');
-  if (coach && score >= WIN_LOCKS) coach.classList.add('hidden');
+function perfectBand(w){
+  return Math.max(0.92, 0.985 - w * 0.004);
+}
+function goodBand(w){
+  return Math.max(0.78, 0.92 - w * 0.008);
 }
 
-function setTimer(secLeft) {
-  const el = document.getElementById('timer');
+function updateHud(){
+  setText('scoreBox', String(score));
+  setText('waveBox', `WAVE ${wave}`);
+  setText('lives', '● '.repeat(lives).trim() || '○');
+  const fill = $('meterFill');
+  if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
+  const btn = $('snapBtn');
+  if (btn) btn.classList.toggle('hot', align >= goodBand(wave));
+}
+
+function flash(kind){
+  const fx = $('fx');
+  if (!fx) return;
+  fx.classList.remove('flash','miss');
+  void fx.offsetWidth;
+  fx.classList.add(kind === 'miss' ? 'miss' : 'flash');
+}
+
+function showCombo(label){
+  const el = $('combo');
   if (!el) return;
-  const m = Math.floor(Math.max(0, secLeft) / 60);
-  const s = Math.floor(Math.max(0, secLeft) % 60);
-  el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-  el.classList.toggle('low', secLeft < 60);
+  el.textContent = label;
+  el.classList.add('show');
+  clearTimeout(showCombo._t);
+  showCombo._t = setTimeout(() => el.classList.remove('show'), 650);
 }
 
-function setStarsHud() {
-  const el = document.getElementById('stars');
-  if (el) el.textContent = `${score} / ${WIN_LOCKS}`;
-}
+function setHint(t){ setText('hint', t); }
 
-function clearFilaments() {
-  for (const f of filaments) scene.remove(f);
-  filaments.length = 0;
-}
-
-function makeFilament(a, b, color = AMBER) {
-  const geo = new THREE.BufferGeometry().setFromPoints([a.clone(), b.clone()]);
-  const line = new THREE.Line(
-    geo,
-    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75 })
-  );
-  scene.add(line);
-  filaments.push(line);
-  return line;
-}
-
-function refreshFilaments() {
-  clearFilaments();
-  if (!craft) return;
-  for (const r of tethered) {
-    makeFilament(craft.position, r.position, AMBER);
-    makeFilament(new THREE.Vector3(0, 0, 0), r.position, COLD);
-  }
-  if (ghost && ghost.visible && tethered.length < 2) {
-    makeFilament(craft.position, ghost.position, 0xc4893a);
-  }
-}
-
-function unitFromSun(p) {
-  const v = p.clone();
-  if (v.lengthSq() < 1e-6) return new THREE.Vector3(1, 0, 0);
-  return v.normalize();
-}
-
-function angleBetweenFromSun(a, b) {
-  return unitFromSun(a).angleTo(unitFromSun(b));
-}
-
-function alignedPair(a, b) {
-  return unitFromSun(a.position).dot(unitFromSun(b.position)) >= MATCH_COS;
-}
-
-function findAligningPair() {
-  if (tethered.length < 2) return null;
-  if (alignedPair(tethered[0], tethered[1])) return [tethered[0], tethered[1]];
-  return null;
-}
-
-function bestNearAlign() {
-  let best = null;
-  let bestAng = Infinity;
-  for (let i = 0; i < relics.length; i++) {
-    for (let j = i + 1; j < relics.length; j++) {
-      const a = relics[i];
-      const b = relics[j];
-      if (a.userData.lockedWith && a.userData.lockedWith === b) continue;
-      const ang = angleBetweenFromSun(a.position, b.position);
-      if (ang < bestAng) {
-        bestAng = ang;
-        best = [a, b];
-      }
-    }
-  }
-  return best;
-}
-
-function lightStar(color) {
-  const star = new THREE.Mesh(
-    new THREE.SphereGeometry(1.4, 10, 8),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
-  );
-  const th = (score / WIN_LOCKS) * Math.PI * 1.4 - 0.4;
-  const ph = 0.55 + score * 0.08;
-  star.position.set(
-    Math.sin(ph) * Math.cos(th) * 220,
-    Math.cos(ph) * 220,
-    Math.sin(ph) * Math.sin(th) * 220
-  );
-  const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(2.8, 10, 8),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.22,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-  );
-  star.add(halo);
-  scene.add(star);
-  stars.push(star);
-}
-
-function spawnTunnel(dir) {
-  const len = 160;
-  const mesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.2, 3.5, len, 12, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: COLD,
-      transparent: true,
-      opacity: 0.32,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-  );
-  mesh.position.copy(dir.clone().multiplyScalar(len * 0.45));
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-  scene.add(mesh);
-  tunnels.push(mesh);
-  return mesh;
-}
-
-function beginTravel(dir) {
-  const from = camera.position.clone();
-  const to = dir.clone().multiplyScalar(95).add(new THREE.Vector3(0, 12, 0));
-  travel = { t: 0, from, to, look: dir.clone().multiplyScalar(40) };
-  state = STATE.LOCK;
-}
-
-function triggerSyzygy(a, b) {
-  if (over || state === STATE.LOCK || state === STATE.WIN || state === STATE.COLLAPSE) return;
-
-  const mid = a.position.clone().add(b.position).multiplyScalar(0.5);
-  const dir = unitFromSun(mid);
-  spawnTunnel(dir);
-  lightStar(SPECTRAL[score % SPECTRAL.length]);
-  audio.stingLock();
-  if (vfx) {
-    vfx.lockBurst(mid, SPECTRAL[(score) % SPECTRAL.length]);
-    vfx.startWarp(dir);
-  }
-  const fx = document.getElementById('fx');
-  if (fx) { fx.classList.remove('flash'); void fx.offsetWidth; fx.classList.add('flash'); }
-
-  spectralSeq.push(a.userData.spectral);
-  score += 1;
-  setStarsHud();
-  tutorialDone = true;
-  setCoach(4);
-  a.userData.lockedWith = b;
-  b.userData.lockedWith = a;
-
-  for (const r of [a, b]) {
-    r.traverse((n) => {
-      if (n.isMesh && n.material && n.material.emissive) {
-        n.material.emissive = new THREE.Color(COLD);
-        n.material.emissiveIntensity = 0.4;
-      }
-    });
-  }
-
-  tethered.length = 0;
-  clearFilaments();
-  if (ghost) ghost.visible = false;
-
-  beginTravel(dir);
-  setHud(score >= WIN_LOCKS ? 'Constellation complete' : `Syzygy ${score} · star ignited`);
-
-  if (score >= WIN_LOCKS) travel.winAfter = true;
-
-  if (!secretFound && spectralSeq.length >= 5) {
-    const last5 = spectralSeq.slice(-5);
-    if (last5.every((v, i) => v === i)) {
-      secretFound = true;
-      setHud('The true name returns: 404‑AURIGA');
-    }
-  }
-}
-
-function checkSyzygy() {
-  if (state === STATE.LOCK || over || !started) return;
-  const pair = findAligningPair();
-  if (!pair) {
-    if (tethered.length === 2) {
-      setHud('Hold the line — drag until beams lock through the sun');
-      setCoach(3);
-    }
-    return;
-  }
-  triggerSyzygy(pair[0], pair[1]);
-}
-
-function toggleTether(relic) {
-  if (over || state === STATE.LOCK) return;
-  const idx = tethered.indexOf(relic);
-  if (idx >= 0) {
-    tethered.splice(idx, 1);
-    state = tethered.length ? STATE.TETHER : STATE.ORBIT;
-    refreshFilaments();
-    setHud(tethered.length ? 'One filament live · tap another relic' : 'Filament released');
-    return;
-  }
-  if (tethered.length >= 2) tethered.shift();
-  tethered.push(relic);
-  state = STATE.TETHER;
-  refreshFilaments();
-  if (tethered.length === 1) {
-    setHud('Filament locked · tap a second relic');
-    setCoach(2);
-  } else {
-    setHud('Two filaments · drag to align through the sun');
-    setCoach(3);
-  }
-  checkSyzygy();
-}
-
-function pickObject(clientX, clientY) {
-  if (!camera || !raycaster) return null;
-  pointerNdc.x = (clientX / innerWidth) * 2 - 1;
-  pointerNdc.y = -(clientY / innerHeight) * 2 + 1;
-  raycaster.setFromCamera(pointerNdc, camera);
-  const hits = raycaster.intersectObjects(relics, true);
-  if (hits.length) {
-    let o = hits[0].object;
-    while (o && !o.userData.isRelic) o = o.parent;
-    if (o && o.userData.isRelic) return o;
-  }
-  if (sun) {
-    const sunHits = raycaster.intersectObject(sun, true);
-    if (sunHits.length) return sun;
-  }
-  return null;
-}
-
-async function boot() {
-  const canvas = document.getElementById('c');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+async function boot(){
+  const canvas = $('c');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.2;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(VOID);
-  scene.fog = new THREE.FogExp2(0x070914, 0.00135);
+  scene.fog = new THREE.FogExp2(0x060814, 0.0014);
 
-  camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.5, 1000);
-  camera.position.set(0, 48, 135);
+  camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.5, 1000);
+  camera.position.set(0, 40, camDist);
 
   raycaster = new THREE.Raycaster();
-  pointerNdc = new THREE.Vector2();
-
-  spacefx = createSpaceBackdrop(scene, { amber: AMBER, cold: COLD });
-
-  scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.45));
-  sunLight = new THREE.PointLight(AMBER, 3.2, 520);
-  sunLight.position.set(0, 8, 0);
+  spacefx = createSpaceBackdrop(scene, { amber:AMBER, cold:COLD });
+  scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.5));
+  sunLight = new THREE.PointLight(AMBER, 3.4, 560);
   scene.add(sunLight);
-  const rim = new THREE.DirectionalLight(COLD, 0.85);
-  rim.position.set(50, 70, -40);
-  scene.add(rim);
-  const fill = new THREE.DirectionalLight(AMBER, 0.25);
-  fill.position.set(-40, 20, 60);
-  scene.add(fill);
+  scene.add(new THREE.DirectionalLight(COLD, 0.8));
 
-  const ecliptic = new THREE.Mesh(
-    new THREE.RingGeometry(32, 150, 96),
-    new THREE.MeshBasicMaterial({
-      color: 0x1a2744,
-      transparent: true,
-      opacity: 0.18,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    })
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(40, 160, 96),
+    new THREE.MeshBasicMaterial({ color:0x152238, transparent:true, opacity:0.2, side:THREE.DoubleSide, depthWrite:false })
   );
-  ecliptic.rotation.x = -Math.PI / 2;
-  scene.add(ecliptic);
+  ring.rotation.x = -Math.PI/2;
+  scene.add(ring);
 
-  sun = await ASSET('./assets/dying_sun.js', { height: 40 });
-  sun.position.set(0, 0, 0);
+  // Aim guide line (sun → aim)
+  const aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(80,0,0)]);
+  const aimLine = new THREE.Line(aimGeo, new THREE.LineBasicMaterial({ color:AMBER, transparent:true, opacity:0.35 }));
+  aimLine.name = 'aimLine';
+  scene.add(aimLine);
+  window.__aimLine = aimLine;
+
+  sun = await ASSET('./assets/dying_sun.js', { height:40 });
   sun.userData.isSun = true;
   scene.add(sun);
-
   sunGlow = createSunGlow(AMBER);
   scene.add(sunGlow);
+  vfx = createVfx(scene, { amber:AMBER, cold:COLD });
 
-  vfx = createVfx(scene, { amber: AMBER, cold: COLD });
-
-  craft = await ASSET('./assets/cartographer_craft.js', { height: 0.7 });
-  placeOnOrbit(craft, orbitTheta, orbitRadius, orbitInclination);
+  craft = await ASSET('./assets/cartographer_craft.js', { height:0.7 });
+  place(craft, aimTheta, 95);
   scene.add(craft);
 
-  const relicFiles = [
-    ['./assets/hollow_moon.js', 6],
-    ['./assets/broken_ring.js', 1.2],
-    ['./assets/fossil_comet.js', 2.5],
-    ['./assets/neutron_heart.js', 2.2],
-    ['./assets/gravity_bell.js', 6],
-    ['./assets/observatory_oculus.js', 5],
-  ];
-
-  const tutorialBase = 0.85;
-  for (let i = 0; i < 12; i++) {
-    const [file, h] = relicFiles[i % relicFiles.length];
-    const relic = await ASSET(file, { height: h });
-    let th, r, incl, ω;
-    if (i === 0) {
-      th = tutorialBase; r = 58; incl = 0.05; ω = 0;
-    } else if (i === 1) {
-      th = tutorialBase + 0.035; r = 92; incl = 0.06; ω = 0;
-    } else {
-      th = (i / 12) * Math.PI * 2 + 1.2;
-      r = 48 + (i % 4) * 16;
-      incl = 0.07 + (i % 3) * 0.05;
-      ω = 0.04 + (i % 5) * 0.012;
-    }
-    placeOnOrbit(relic, th, r, incl);
-    relic.userData.isRelic = true;
-    relic.userData.orbit = { th, r, incl, ω, frozen: i < 2 };
-    relic.userData.spectral = i % 5;
-    relic.userData.tutorial = i < 2;
-    relics.push(relic);
-    scene.add(relic);
+  for (const [file,h] of relicFiles) {
+    const r = await ASSET(file, { height:h });
+    r.visible = false;
+    scene.add(r);
+    relicPool.push(r);
   }
 
-  ghost = new THREE.Mesh(
-    new THREE.SphereGeometry(2.4, 12, 10),
-    new THREE.MeshBasicMaterial({
-      color: AMBER,
-      transparent: true,
-      opacity: 0.45,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-  );
-  ghost.position.copy(relics[0].position);
-  scene.add(ghost);
-
-  window.addEventListener('resize', onResize);
   bindInput(canvas);
+  window.addEventListener('resize', onResize);
 
   window.__READY__ = true;
-  window.__START__ = start;
+  window.__START__ = startRun;
   publishGame();
 
-  document.getElementById('load')?.classList.add('gone');
-  setHud('Follow the HOWTO panel');
-  setCoach(0);
-  setStarsHud();
-  setTimer(GAME_SECS);
+  $('load')?.classList.add('gone');
   requestAnimationFrame(frame);
 }
 
-function start() {
-  if (started) return;
-  started = true;
-  state = STATE.ORBIT;
-  over = false;
-  playElapsed = 0;
-  document.getElementById('start')?.classList.remove('on');
-  document.getElementById('hud')?.classList.add('on');
-  setHud('Drag to move · then tap the amber relic');
-  setCoach(0);
-  refreshFilaments();
+function spawnTarget(){
+  const p = waveParams(wave);
+  targetObj = relicPool[Math.floor(Math.random()*relicPool.length)];
+  targetObj.visible = true;
+  // spawn opposite-ish, sweep toward alignment
+  const side = Math.random() < 0.5 ? 1 : -1;
+  targetTheta = aimTheta + side * (0.9 + Math.random()*0.7);
+  targetSpeed = p.speed * side * -1; // move toward aim
+  targetAlive = true;
+  targetMaxLife = Math.max(1.6, 4.2 - wave * 0.18);
+  targetLife = targetMaxLife;
+  place(targetObj, targetTheta, 70 + Math.random()*25, (Math.random()-0.5)*8);
+  setHint(wave === 1 && snapsInWave === 0 ? 'Drag to aim · SNAP in the sweet spot' : 'ALIGN & SNAP');
+}
+
+function failLife(reason){
+  lives -= 1;
+  combo = 0;
+  audio.stingMiss();
+  flash('miss');
+  setHint(reason || 'MISS');
+  updateHud();
+  if (targetObj) targetObj.visible = false;
+  targetAlive = false;
+  if (lives <= 0) endRun();
+  else setTimeout(spawnTarget, 500);
+}
+
+function doSnap(){
+  if (!started || over || state !== STATE.PLAY || !targetAlive) return;
+  const perf = perfectBand(wave);
+  const good = goodBand(wave);
+  let grade = 'MISS';
+  let pts = 0;
+
+  if (align >= perf) { grade = 'PERFECT'; pts = 1000; combo += 1; }
+  else if (align >= good) { grade = 'GOOD'; pts = 500; combo += 1; }
+  else if (align >= 0.55) { grade = 'OK'; pts = 200; combo = 0; }
+  else {
+    failLife('TOO EARLY / OFF');
+    return;
+  }
+
+  const mult = Math.max(1, combo);
+  const gained = Math.floor(pts * mult * (1 + (wave-1)*0.08));
+  score += gained;
+  bestCombo = Math.max(bestCombo, combo);
+  snapsInWave += 1;
+
+  audio.stingLock();
+  flash('flash');
+  showCombo(`${grade}${combo>1?` x${combo}`:''}`);
+  setHint(`+${gained}`);
+  if (vfx && targetObj) {
+    vfx.lockBurst(targetObj.position.clone().multiplyScalar(0.5), grade==='PERFECT'?GOOD:AMBER);
+    vfx.pulseAt(new THREE.Vector3(), COLD);
+  }
+
+  targetObj.visible = false;
+  targetAlive = false;
+  updateHud();
+
+  const need = waveParams(wave).perWave;
+  if (snapsInWave >= need) {
+    wave += 1;
+    snapsInWave = 0;
+    setHint(`WAVE ${wave}`);
+    showCombo(`WAVE ${wave}`);
+  }
+  setTimeout(spawnTarget, 420);
+}
+
+function startRun(){
+  if (started && !over) return;
+  score = 0; wave = 1; lives = 3; combo = 0; bestCombo = 0; snapsInWave = 0;
+  playElapsed = 0; over = false; started = true; state = STATE.PLAY;
+  zoom = 1; camDist = 120;
+  $('start')?.classList.remove('on');
+  $('board')?.classList.remove('on');
+  $('over')?.classList.remove('on');
+  $('hud')?.classList.add('on');
+  updateHud();
   audio.start();
+  spawnTarget();
 }
 
-function endWin() {
+function endRun(){
   over = true;
-  state = STATE.WIN;
-  document.getElementById('win')?.classList.add('on');
-  document.getElementById('winSub').textContent = secretFound
-    ? 'The constellation speaks its true name: 404‑AURIGA'
-    : 'Five stars burn. The orrery remembers.';
-  document.getElementById('coach')?.classList.add('hidden');
-  setHud('Victory');
+  state = STATE.OVER;
+  $('hud')?.classList.remove('on');
+  $('over')?.classList.add('on');
+  setText('overSub', `Score ${score} · Wave ${wave} · Best combo x${bestCombo}`);
+  const nameIn = $('nameIn');
+  if (nameIn && !nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0,12);
+  publishGame();
 }
 
-function endCollapse() {
-  over = true;
-  state = STATE.COLLAPSE;
-  document.getElementById('lose')?.classList.add('on');
-  document.getElementById('coach')?.classList.add('hidden');
-  setHud('The sun folds inward');
-}
-
-function onResize() {
-  if (!renderer || !camera) return;
-  camera.aspect = innerWidth / innerHeight;
+function onResize(){
+  if (!renderer||!camera) return;
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
 }
 
-function pointer(e) {
-  if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  if (e.changedTouches && e.changedTouches[0])
-    return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
-  return { x: e.clientX, y: e.clientY };
+function ptrPos(e, id){
+  if (e.touches) {
+    for (const t of e.touches) if (t.identifier === id) return {x:t.clientX,y:t.clientY};
+  }
+  return {x:e.clientX, y:e.clientY};
 }
 
-function bindInput(canvas) {
+function bindInput(canvas){
   const down = (e) => {
+    e.preventDefault();
+    if (e.pointerId != null) {
+      pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+      try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+    }
+    if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      pinchStartDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      pinchStartZoom = zoom;
+      dragging = false;
+      return;
+    }
     if (!started || over) return;
     dragging = true;
-    dragMoved = false;
-    lastPtr = pointer(e);
-    ptrDownAt = performance.now();
-    holdingSun = false;
-    holdSunT = 0;
-    const hit = pickObject(lastPtr.x, lastPtr.y);
-    if (hit && hit.userData && hit.userData.isSun && score >= 2) holdingSun = true;
-    e.preventDefault();
+    lastPtr = {x:e.clientX,y:e.clientY};
   };
-
   const move = (e) => {
-    if (!dragging || !started || over || state === STATE.LOCK) return;
-    const p = pointer(e);
-    const dx = p.x - lastPtr.x;
-    const dy = p.y - lastPtr.y;
-    if (Math.abs(dx) + Math.abs(dy) > 6) {
-      dragMoved = true;
-      holdingSun = false;
-      if (!movedOnce) {
-        movedOnce = true;
-        setCoach(1);
-        setHud('Good — now tap the amber‑marked relic');
-      }
-    }
-    lastPtr = p;
-    orbitTheta += dx * 0.0045;
-    orbitRadius = THREE.MathUtils.clamp(orbitRadius - dy * 0.085, 38, 128);
-    orbitInclination = THREE.MathUtils.clamp(orbitInclination + dx * 0.00012, 0.02, 0.38);
     e.preventDefault();
-  };
-
-  const up = (e) => {
-    if (!started) return;
-    const p = pointer(e);
-    const wasHold = holdingSun;
-    const held = (performance.now() - ptrDownAt) / 1000;
-    dragging = false;
-    holdingSun = false;
-
-    if (!dragMoved && !over && state !== STATE.LOCK) {
-      const hit = pickObject(p.x, p.y);
-      if (hit && hit.userData && hit.userData.isRelic) {
-        if (coachStep < 1) setCoach(1);
-        toggleTether(hit);
-      } else if (wasHold && held >= HOLD_SUN && score >= 2) {
-        const pair = bestNearAlign();
-        if (pair && ghost) {
-          ghost.visible = true;
-          ghost.position.copy(pair[0].position);
-          setHud('Ghost path — tether these two');
-          refreshFilaments();
-        }
-      }
+    if (e.pointerId != null && pointers.has(e.pointerId)) {
+      pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
     }
-    lastPtr = null;
+    if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      if (pinchStartDist > 0) {
+        zoom = THREE.MathUtils.clamp(pinchStartZoom * (pinchStartDist / d), 0.55, 1.85);
+        camDist = 70 + zoom * 70;
+      }
+      return;
+    }
+    if (!dragging || !started || over) return;
+    const dx = e.clientX - lastPtr.x;
+    lastPtr = {x:e.clientX,y:e.clientY};
+    aimTheta += dx * 0.0055;
+  };
+  const up = (e) => {
+    if (e.pointerId != null) pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStartDist = 0;
+    dragging = false;
   };
 
-  canvas.addEventListener('pointerdown', down, { passive: false });
-  window.addEventListener('pointermove', move, { passive: false });
+  canvas.addEventListener('pointerdown', down, {passive:false});
+  window.addEventListener('pointermove', move, {passive:false});
   window.addEventListener('pointerup', up);
   window.addEventListener('pointercancel', up);
 
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
-  });
-  window.addEventListener('keyup', (e) => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
-  });
+  // touch fallback pinch via touches
+  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); }, {passive:false});
 
-  document.getElementById('btnStart')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    start();
+  $('snapBtn')?.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); doSnap(); });
+  $('btnStart')?.addEventListener('click', ()=> startRun());
+  $('btnRetry')?.addEventListener('click', ()=> startRun());
+  $('btnLb')?.addEventListener('click', ()=> openBoard('local'));
+  $('btnBack')?.addEventListener('click', ()=>{
+    $('board')?.classList.remove('on');
+    $('start')?.classList.add('on');
   });
-  document.getElementById('btnStart')?.addEventListener(
-    'touchend',
-    (e) => {
-      e.preventDefault();
-      start();
-    },
-    { passive: false }
-  );
-  document.getElementById('btnAgain')?.addEventListener('click', () => location.reload());
-  document.getElementById('btnAgainLose')?.addEventListener('click', () => location.reload());
+  $('tabLocal')?.addEventListener('click', ()=> renderBoard(loadLocal(), 'LOCAL'));
+  $('tabGlobal')?.addEventListener('click', async ()=>{
+    $('lb').innerHTML = '<em>loading global…</em>';
+    try { renderBoard(await fetchGlobal(), 'GLOBAL'); }
+    catch { $('lb').innerHTML = '<em>Global unreachable — try later</em>'; }
+  });
+  $('btnSubmit')?.addEventListener('click', async ()=>{
+    const name = ($('nameIn')?.value || 'ANON').trim().slice(0,12) || 'ANON';
+    localStorage.setItem('syzygy_tag', name);
+    saveLocal(name, score, wave);
+    $('btnSubmit').textContent = 'SAVING…';
+    try {
+      await submitGlobal(name, score, playElapsed);
+      $('btnSubmit').textContent = 'SAVED ✓';
+    } catch (err) {
+      console.warn(err);
+      $('btnSubmit').textContent = 'LOCAL SAVED';
+    }
+  });
 }
 
-function publishGame() {
-  const info = renderer ? renderer.info.render : { calls: 0, triangles: 0 };
+function openBoard(which){
+  $('start')?.classList.remove('on');
+  $('board')?.classList.add('on');
+  if (which==='global') $('tabGlobal')?.click();
+  else renderBoard(loadLocal(), 'LOCAL');
+}
+
+function renderBoard(rows, title){
+  const lb = $('lb');
+  if (!lb) return;
+  if (!rows.length) { lb.innerHTML = `<em>No ${title.toLowerCase()} scores yet</em>`; return; }
+  lb.innerHTML = `<table>${rows.slice(0,15).map((r,i)=>
+    `<tr><td>${i+1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
+  ).join('')}</table>`;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function publishGame(){
+  const info = renderer ? renderer.info.render : {calls:0,triangles:0};
   window.__GAME__ = {
-    pos: craft ? [craft.position.x, craft.position.z] : [0, 0],
-    fps,
-    speed,
-    score,
-    over,
-    draws: info.calls,
-    tris: info.triangles,
-    state,
-    timeLeft: Math.max(0, GAME_SECS - playElapsed),
+    pos: craft ? [craft.position.x, craft.position.z] : [0,0],
+    fps, speed: Math.abs(targetSpeed)*40, score, over,
+    draws: info.calls, tris: info.triangles, state, wave, lives,
   };
 }
 
-function frame(now) {
-  const rawDt = (now - lastT) / 1000;
-  fps = 1 / (rawDt || 0.016);
-  const dt = Math.min(0.05, Math.max(0.001, rawDt));
+function frame(now){
+  const raw = (now-lastT)/1000;
+  fps = 1/(raw||0.016);
+  const dt = Math.min(0.05, Math.max(0.001, raw));
   lastT = now;
   clockT += dt;
-
   if (spacefx) spacefx.update(dt, clockT);
-
-  // alignment heat 0..1 when two tethered
-  if (tethered.length === 2) {
-    const a = tethered[0].position;
-    const b = tethered[1].position;
-    const ang = unitFromSun(a).angleTo(unitFromSun(b));
-    const maxAng = (12 * Math.PI) / 180;
-    alignHeat = Math.max(0, 1 - ang / maxAng);
-    if (alignHeat > 0.75 && vfx && Math.random() < dt * 2) {
-      vfx.pulseAt(a.clone().add(b).multiplyScalar(0.5), COLD);
-    }
-  } else {
-    alignHeat = 0;
-  }
-
-  if (vfx) {
-    vfx.update(dt, {
-      craftPos: craft ? craft.position : null,
-      speed,
-      alignT: alignHeat,
-      sunScale,
-    });
-  }
 
   if (started && !over) {
     playElapsed += dt;
-    const left = GAME_SECS - playElapsed;
-    setTimer(left);
-    const life = Math.max(0, left / GAME_SECS);
-    sunScale = 0.55 + life * 0.45;
-    if (sun) sun.scale.setScalar(sunScale);
-    if (sunGlow) sunGlow.scale.setScalar(sunScale);
-    if (sunLight) {
-      sunLight.intensity = 0.8 + life * 2.6;
-      sunLight.color.setHex(life > 0.35 ? AMBER : 0x8b3a1a);
+    audio.setTension(Math.min(1, wave/12));
+
+    // move target toward aim; expire if too late
+    if (targetAlive && targetObj) {
+      targetTheta += targetSpeed * dt;
+      place(targetObj, targetTheta, 78, targetObj.position.y);
+      targetLife -= dt;
+      if (targetLife <= 0) failLife('TOO LATE');
     }
-    audio.setTension(1 - life);
-    if (left <= 0 && state !== STATE.LOCK) endCollapse();
-  }
 
-  if (holdingSun && score >= 2) holdSunT += dt;
-
-  if (started && !over && state !== STATE.LOCK) {
-    if (keys.left) orbitTheta -= 0.95 * dt;
-    if (keys.right) orbitTheta += 0.95 * dt;
-    orbitTheta += 0.05 * dt;
-  }
-
-  if (craft) {
-    const prev = craft.position.clone();
-    placeOnOrbit(craft, orbitTheta, orbitRadius, orbitInclination);
-    speed = prev.distanceTo(craft.position) / dt;
-  }
-
-  for (const r of relics) {
-    const orb = r.userData.orbit;
-    if (!orb) continue;
-    if (!(orb.frozen && !tutorialDone) && state !== STATE.LOCK && started && !over) {
-      orb.th += orb.ω * dt * 0.16;
+    // alignment quality: 1 when aimTheta ~= targetTheta
+    if (targetAlive) {
+      let d = Math.abs(Math.atan2(Math.sin(targetTheta-aimTheta), Math.cos(targetTheta-aimTheta)));
+      const soft = waveParams(wave).window + 0.25;
+      align = Math.max(0, 1 - d / soft);
+    } else {
+      align = 0;
     }
-    placeOnOrbit(r, orb.th, orb.r, orb.incl);
+    updateHud();
   }
 
-  if (ghost && ghost.visible && !tutorialDone && relics[0]) {
-    ghost.position.copy(relics[0].position);
+  place(craft, aimTheta, 95);
+
+  // aim line
+  const aimLine = window.__aimLine;
+  if (aimLine) {
+    const end = new THREE.Vector3(Math.cos(aimTheta)*160, 0, Math.sin(aimTheta)*160);
+    aimLine.geometry.setFromPoints([new THREE.Vector3(0,0,0), end]);
   }
 
-  if (filaments.length && craft) {
-    let fi = 0;
-    for (const r of tethered) {
-      if (fi < filaments.length) {
-        const pos = filaments[fi].geometry.attributes.position;
-        pos.setXYZ(0, craft.position.x, craft.position.y, craft.position.z);
-        pos.setXYZ(1, r.position.x, r.position.y, r.position.z);
-        pos.needsUpdate = true;
-        fi++;
-      }
-      if (fi < filaments.length) {
-        const pos = filaments[fi].geometry.attributes.position;
-        pos.setXYZ(0, 0, 0, 0);
-        pos.setXYZ(1, r.position.x, r.position.y, r.position.z);
-        pos.needsUpdate = true;
-        fi++;
-      }
-    }
-    if (ghost && ghost.visible && tethered.length < 2 && fi < filaments.length) {
-      const pos = filaments[fi].geometry.attributes.position;
-      pos.setXYZ(0, craft.position.x, craft.position.y, craft.position.z);
-      pos.setXYZ(1, ghost.position.x, ghost.position.y, ghost.position.z);
-      pos.needsUpdate = true;
-    }
+  if (vfx) vfx.update(dt, { craftPos: craft?.position, speed: Math.abs(targetSpeed)*50, alignT: align, sunScale:1 });
+
+  // camera
+  if (camera) {
+    const target = new THREE.Vector3(Math.cos(aimTheta)*40, 18, Math.sin(aimTheta)*40);
+    const camGoal = new THREE.Vector3(
+      Math.cos(aimTheta+0.9)*camDist,
+      28 + (1.2-zoom)*10,
+      Math.sin(aimTheta+0.9)*camDist
+    );
+    camera.position.lerp(camGoal, 1-Math.exp(-3*dt));
+    camera.lookAt(target.x*0.2, 4, target.z*0.2);
+    camera.fov = THREE.MathUtils.lerp(camera.fov, 48 + zoom*10, 0.1);
+    camera.updateProjectionMatrix();
   }
 
-  if (tethered.length === 2 && state !== STATE.LOCK) checkSyzygy();
-
-  if (travel) {
-    travel.t += dt / TRAVEL_SECS;
-    const u = Math.min(1, travel.t);
-    const e = u * u * (3 - 2 * u);
-    camera.position.lerpVectors(travel.from, travel.to, e);
-    camera.lookAt(travel.look);
-    if (u >= 1) {
-      const winAfter = travel.winAfter;
-      travel = null;
-      if (vfx) vfx.stopWarp();
-      if (winAfter) endWin();
-      else if (!over) {
-        state = tethered.length ? STATE.TETHER : STATE.ORBIT;
-        if (score < WIN_LOCKS) setHud('Find the next alignment · tap two relics');
-        for (const r of relics) {
-          if (r.userData.orbit && r.userData.orbit.frozen) {
-            r.userData.orbit.frozen = false;
-            r.userData.orbit.ω = 0.03;
-          }
-        }
-      }
-    }
-  } else if (craft && state === STATE.COLLAPSE) {
-    camera.position.lerp(new THREE.Vector3(0, 20, 60), 1 - Math.exp(-1.5 * dt));
-    camera.lookAt(0, 0, 0);
-    if (sun) sun.scale.multiplyScalar(Math.max(0.92, 1 - dt * 0.8));
-    if (sunGlow) sunGlow.scale.copy(sun.scale);
-  } else if (craft) {
-    const target = craft.position.clone();
-    const back = target.clone().normalize().multiplyScalar(42);
-    const camGoal = target.clone().add(new THREE.Vector3(0, 26, 0)).add(back);
-    if (camGoal.length() < 58) camGoal.setLength(58);
-    camera.position.lerp(camGoal, 1 - Math.exp(-2.0 * dt));
-    camera.lookAt(target.x * 0.4, target.y * 0.4 + 2, target.z * 0.4);
-  }
-
-  if (sun && started) sun.rotation.y += dt * 0.04;
+  if (sun) sun.rotation.y += dt*0.05;
+  if (sunLight) sunLight.intensity = 2.6 + Math.sin(clockT*2)*0.3;
 
   renderer.render(scene, camera);
   publishGame();
   requestAnimationFrame(frame);
 }
 
-boot().catch((err) => {
+boot().catch((err)=>{
   console.error(err);
-  const msg = document.getElementById('loadmsg');
-  if (msg) msg.textContent = String(err.message || err);
+  setText('loadmsg', String(err.message||err));
 });

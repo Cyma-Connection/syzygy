@@ -1,36 +1,19 @@
-# SYZYGY
+# SYZYGY SNAP
 
-A spatial alignment game in Three.js: you orbit a dying sun and drag broken relics into syzygy. Each lock carves a light tunnel and lights a star. Built for the [404 Game Jam](https://game.404.xyz/) — geometry as code.
+Arcade orbital alignment for the [404 Game Jam](https://game.404.xyz/). Drag to aim through a dying sun, then **SNAP** in the sweet spot. Build combos, clear waves, climb the board.
 
-## Play (local)
+## Play
+https://cyma-connection.github.io/syzygy/
 
-Serve the repo root over HTTP (modules + import map):
+Or serve this folder over HTTP and open `index.html`.
 
-```bash
-# using the 404 recipe harness (recommended)
-git clone https://github.com/404-Repo/404-game-recipe.git
-cd 404-game-recipe && npm install && npm run selftest
-node harness/serve.mjs /path/to/syzygy
-```
-
-Or any static server from this directory:
-
-```bash
-npx --yes serve -p 5173
-```
-
-Open the printed URL. Tap **BEGIN**, then drag to move.
+## Controls
+- **Drag** — aim your filament through the sun  
+- **SNAP** — lock when the meter peaks  
+- **Pinch** — zoom  
 
 ## Jam telemetry
+`window.__READY__`, `window.__START__()`, `window.__GAME__` each frame (`pos`, `fps`, `score`, `draws`, `tris`, …).
 
-- `window.__READY__` — scene loaded and startable
-- `window.__START__()` — begin play (also bound to BEGIN)
-- `window.__GAME__` — per frame: `pos` (metres xz), `fps` (real dt), `speed`, `score`, `over`, `draws`, `tris`, `state`
-
-## 404 recipe
-
-3D assets are Three.js modules under `assets/` following [404-game-recipe](https://github.com/404-Repo/404-game-recipe) (`docs/asset-contract.md`). Current meshes are **stubs**; replace via reference → 3 candidates → `verify.mjs` → pick by eye. Style lock: `docs/STYLE_LOCK.md`.
-
-## Status
-
-Scaffold: orbit drag, sun + craft + placeholder relics, dual-temperature lighting, jam hooks. Full syzygy win loop and custom touch gate still to come — see `NOTES.md`.
+## Stack
+Three.js geometry-as-code assets, procedural space audio, Pages hosting.

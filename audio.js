@@ -1,155 +1,128 @@
-/**
- * Procedural space bed — ambient pad + soft pulse (no audio files).
- * Starts on first user gesture (BEGIN).
- */
+/** Catchy discreet futuristic pulse — arcade bed. */
 export function createSpaceAudio() {
-  let ctx = null;
-  let master = null;
-  let started = false;
-  let pulseGain = null;
-  let timer = null;
+  let ctx, master, filter, started = false, timers = [];
 
   function ensure() {
     if (ctx) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.0;
+    master.gain.value = 0;
+    filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    filter.connect(master);
     master.connect(ctx.destination);
 
-    // Dark pad (two detuned saws through lowpass)
-    const padGain = ctx.createGain();
-    padGain.gain.value = 0.22;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 420;
-    filter.Q.value = 0.7;
-    padGain.connect(filter);
-    filter.connect(master);
-
-    for (const [freq, det] of [
-      [55, 0],
-      [82.5, 3],
-      [110, -2],
-    ]) {
+    // bass drone
+    for (const f of [55, 82.4]) {
       const o = ctx.createOscillator();
       o.type = 'sawtooth';
-      o.frequency.value = freq;
-      o.detune.value = det;
+      o.frequency.value = f;
       const g = ctx.createGain();
-      g.gain.value = 0.18;
+      g.gain.value = 0.07;
       o.connect(g);
-      g.connect(padGain);
+      g.connect(filter);
       o.start();
     }
+  }
 
-    // High shimmer
-    const shim = ctx.createOscillator();
-    shim.type = 'sine';
-    shim.frequency.value = 440;
-    const shimG = ctx.createGain();
-    shimG.gain.value = 0.03;
-    const shimF = ctx.createBiquadFilter();
-    shimF.type = 'highpass';
-    shimF.frequency.value = 600;
-    shim.connect(shimG);
-    shimG.connect(shimF);
-    shimF.connect(master);
-    shim.start();
-    // slow LFO on shimmer amp
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.07;
-    const lfoG = ctx.createGain();
-    lfoG.gain.value = 0.025;
-    lfo.connect(lfoG);
-    lfoG.connect(shimG.gain);
-    lfo.start();
+  function tone(freq, t, dur, type, gain = 0.12) {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(filter);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
 
-    // Soft kick/pulse for rhythm
-    pulseGain = ctx.createGain();
-    pulseGain.gain.value = 0;
-    pulseGain.connect(master);
-
-    function beat() {
-      if (!ctx || ctx.state === 'closed') return;
+  function scheduleLoop() {
+    const bpm = 112;
+    const beat = 60 / bpm;
+    let step = 0;
+    const tick = () => {
+      if (!ctx) return;
       const t = ctx.currentTime;
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(90, t);
-      o.frequency.exponentialRampToValueAtTime(38, t + 0.18);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-      o.connect(g);
-      g.connect(pulseGain);
-      o.start(t);
-      o.stop(t + 0.4);
-
-      // soft click/hat
-      const nbuf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
-      const data = nbuf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const noise = ctx.createBufferSource();
-      noise.buffer = nbuf;
-      const ng = ctx.createGain();
-      ng.gain.setValueAtTime(0.05, t);
-      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-      const nf = ctx.createBiquadFilter();
-      nf.type = 'highpass';
-      nf.frequency.value = 4000;
-      noise.connect(nf);
-      nf.connect(ng);
-      ng.connect(master);
-      noise.start(t);
-    }
-
-    // ~72 BPM soft pulse
-    timer = setInterval(beat, 833);
-    beat();
+      const n = step % 8;
+      // kick
+      if (n % 2 === 0) {
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(110, t);
+        o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+        o.connect(g);
+        g.connect(master);
+        o.start(t);
+        o.stop(t + 0.22);
+      }
+      // hat
+      {
+        const buf = ctx.createBuffer(1, ctx.sampleRate * 0.03, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = n % 2 ? 0.04 : 0.02;
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 6000;
+        src.connect(hp);
+        hp.connect(g);
+        g.connect(master);
+        src.start(t);
+      }
+      // arp
+      const scale = [0, 3, 5, 7, 10, 12, 15, 19];
+      const root = 220;
+      const f = root * Math.pow(2, scale[n] / 12);
+      tone(f, t, 0.18, 'square', 0.045);
+      if (n === 0 || n === 4) tone(f * 2, t, 0.12, 'triangle', 0.03);
+      step++;
+    };
+    tick();
+    timers.push(setInterval(tick, beat * 1000));
   }
 
   return {
     async start() {
       ensure();
       if (ctx.state === 'suspended') await ctx.resume();
-      if (started) return;
-      started = true;
+      if (!started) {
+        started = true;
+        scheduleLoop();
+      }
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
-      master.gain.setValueAtTime(master.gain.value, t);
-      master.gain.linearRampToValueAtTime(0.55, t + 2.5);
-      if (pulseGain) pulseGain.gain.linearRampToValueAtTime(0.35, t + 4);
+      master.gain.linearRampToValueAtTime(0.42, t + 1.2);
     },
-    setTension(amount) {
-      // 0..1 — brighten filter when aligning / late game
-      if (!ctx) return;
-      // no direct filter ref exported; tension via master slight bump
-      const t = ctx.currentTime;
-      const target = 0.45 + amount * 0.25;
-      master.gain.linearRampToValueAtTime(Math.min(0.75, target), t + 0.4);
+    setTension(x) {
+      if (!filter) return;
+      filter.frequency.linearRampToValueAtTime(700 + x * 1400, ctx.currentTime + 0.2);
     },
     stingLock() {
       if (!ctx || !started) return;
       const t = ctx.currentTime;
-      const freqs = [220, 277, 330];
-      for (const f of freqs) {
-        const o = ctx.createOscillator();
-        o.type = 'triangle';
-        o.frequency.value = f;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.2, t + 0.04);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
-        o.connect(g);
-        g.connect(master);
-        o.start(t);
-        o.stop(t + 1.3);
-      }
+      [523, 659, 784].forEach((f, i) => tone(f, t + i * 0.04, 0.35, 'triangle', 0.14));
+    },
+    stingMiss() {
+      if (!ctx || !started) return;
+      const t = ctx.currentTime;
+      tone(110, t, 0.25, 'sawtooth', 0.1);
+      tone(90, t + 0.05, 0.3, 'sawtooth', 0.08);
     },
     stop() {
-      if (timer) clearInterval(timer);
-      timer = null;
+      timers.forEach(clearInterval);
+      timers = [];
       if (ctx) ctx.close();
       ctx = null;
       started = false;

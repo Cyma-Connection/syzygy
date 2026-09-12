@@ -1,14 +1,19 @@
-# NOTES
+# NOTES — SYZYGY SNAP
 
-## Shipped
-- Side HOWTO coach (steps advance with play)
-- Nebula sky shader + layered starfields + sun glow
-- ACES tone mapping, denser lighting
-- Procedural Web Audio space bed (pad + soft ~72 BPM pulse + lock sting)
-- Orbit / tether / syzygy / win-lose loop
-- Jam hooks `__READY__` / `__START__` / `__GAME__`
+Arcade rebuild (2026-09-12): timing alignment SNAP, waves, lives, combo, pinch-zoom, local+global ranks.
 
-## Next
-1. Real 404 verify loop per asset (replace stubs)
-2. Custom jam.mjs touch driver
-3. Gate verdict + PR to 404-game-jam
+## Loop
+- Drag aim through the sun
+- Relic sweeps in; ALIGN meter fills
+- SNAP: Perfect / Good / OK — or miss → lose a life
+- 5 snaps → next wave (faster, tighter)
+- 3 lives → run over → save score
+
+## Controls
+- Drag: aim
+- SNAP button: lock
+- Pinch: zoom
+
+## Leaderboard
+- Local: localStorage
+- Global: scores.keithcirkel.co.uk game `33fwOVKzDg7Z`
