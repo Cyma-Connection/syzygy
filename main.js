@@ -111,7 +111,7 @@ function waveParams(w) {
     soft: Math.max(0.12, 0.34 - w * 0.011),
     perWave: 5,
     maxObjects: Math.min(8, 3 + Math.floor(w / 2)),
-    debrisChance: Math.min(0.42, 0.08 + w * 0.035),
+    debrisChance: Math.min(0.26, 0.05 + w * 0.02),
   };
 }
 
@@ -215,6 +215,7 @@ function paintCoach() {
 window.__syzygyPaintCoach = paintCoach;
 
 function advanceCoach() {
+  audio.start();
   coachIdx += 1;
   if (coachIdx >= coachScreens().length) {
     localStorage.setItem('syzygy_coach_v1', '1');
@@ -240,14 +241,39 @@ function clearWorld() {
   world = [];
 }
 
+function countScoring() {
+  return world.filter((o) => o.kind !== KIND.DEBRIS).length;
+}
+
 function pickKind(boss) {
   if (boss) return KIND.RELIC;
   const p = waveParams(wave);
+  // Soft-lock guard: always keep scoring targets available
+  if (countScoring() < 2) {
+    const r = Math.random();
+    if (r < 0.55) return KIND.RELIC;
+    if (r < 0.8) return KIND.PLANET;
+    return KIND.STAR;
+  }
   const r = Math.random();
   if (r < p.debrisChance) return KIND.DEBRIS;
-  if (r < p.debrisChance + 0.18) return KIND.PLANET;
-  if (r < p.debrisChance + 0.32) return KIND.STAR;
+  if (r < p.debrisChance + 0.2) return KIND.PLANET;
+  if (r < p.debrisChance + 0.38) return KIND.STAR;
   return KIND.RELIC;
+}
+
+function ensureProgressTargets() {
+  let guard = 0;
+  while (countScoring() < 2 && world.length < 10 && guard++ < 6) {
+    const kind = Math.random() < 0.55 ? KIND.RELIC : (Math.random() < 0.5 ? KIND.PLANET : KIND.STAR);
+    const o = makeObject(kind, false);
+    o.theta = craftTheta + Math.PI * (0.55 + Math.random() * 0.9) * (Math.random() < 0.5 ? 1 : -1);
+    o.radius = INNER_MIN + Math.random() * (INNER_MAX - INNER_MIN);
+    o.mesh.visible = true;
+    place(o.mesh, o.theta, o.radius, o.y);
+    if (o.owned && o.mesh.parent !== scene) scene.add(o.mesh);
+    world.push(o);
+  }
 }
 
 function makeObject(kind, boss) {
@@ -301,7 +327,7 @@ function spawnWaveField() {
   }
 
   for (let i = world.length; i < count; i++) {
-    const kind = isBossWave && Math.random() < 0.55 ? KIND.DEBRIS : pickKind(false);
+    const kind = (isBossWave && countScoring() >= 2 && Math.random() < 0.32) ? KIND.DEBRIS : pickKind(false);
     const o = makeObject(kind, false);
     let theta;
     let tries = 0;
@@ -317,17 +343,19 @@ function spawnWaveField() {
     world.push(o);
   }
   if (!isBossWave) setHint(wave === 1 ? t('hintFeel') : t('hintAlign'));
+  ensureProgressTargets();
 }
 
 function refillObject() {
   if (world.length >= waveParams(wave).maxObjects + (isBossWave ? 3 : 0)) return;
-  const kind = isBossWave && Math.random() < 0.5 ? KIND.DEBRIS : pickKind(false);
+  const kind = (countScoring() >= 2 && isBossWave && Math.random() < 0.28) ? KIND.DEBRIS : pickKind(false);
   const o = makeObject(kind, false);
   o.theta = craftTheta + Math.PI * (0.7 + Math.random() * 0.6) * (Math.random() < 0.5 ? 1 : -1);
   o.radius = INNER_MIN + Math.random() * (INNER_MAX - INNER_MIN);
   o.y = (Math.random() - 0.5) * 10;
   place(o.mesh, o.theta, o.radius, o.y);
   world.push(o);
+  ensureProgressTargets();
 }
 
 function removeObject(o) {
@@ -428,6 +456,7 @@ function failLife(reason) {
 }
 
 function doSnap() {
+  audio.start();
   if (!started || over || state !== STATE.PLAY || endingCinematic) return;
   if (freezeFrames > 0) return;
 
@@ -442,6 +471,7 @@ function doSnap() {
   }
 
   if (target.kind === KIND.DEBRIS) {
+    if (audio.stingDebris) audio.stingDebris(); else audio.stingMiss();
     // distinct bad FX
     if (audio.stingDebris) audio.stingDebris(); else audio.stingMiss();
     flash('miss');
@@ -504,6 +534,7 @@ function doSnap() {
   }
   for (const o of toRemove) removeObject(o);
   for (let i = 0; i < toRemove.length; i++) refillObject();
+  ensureProgressTargets();
 
   updateHud();
   maybeAdvanceWave();
@@ -908,7 +939,7 @@ function bindInput(canvas) {
     e.preventDefault();
     const m = audio.toggleMute();
     const b = $('btnMute');
-    if (b) { b.classList.toggle('off', m); b.textContent = m ? t('mute') : '♪'; }
+    if (b) { b.classList.toggle('off', m); b.textContent = m ? ('🔇 ' + t('mute')) : '♪ SOUND'; }
   });
   $('btnStart')?.addEventListener('click', () => startRun());
   $('btnRetry')?.addEventListener('click', () => startRun());
