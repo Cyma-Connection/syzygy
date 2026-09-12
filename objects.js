@@ -156,3 +156,55 @@ export function createDebris(scale = 1) {
 }
 
 export const OBJECT_COLORS = { AMBER, COLD, BRASS, BRASS_DK, OBSIDIAN, BONE, EMBER };
+
+/** Black hole — void core + cold accretion disk. Instantly distinct from debris. */
+export function createBlackHole(scale = 1) {
+  const g = new THREE.Group();
+  g.name = 'blackhole';
+  const voidCore = new THREE.Mesh(
+    new THREE.SphereGeometry(3.2 * scale, 20, 16),
+    new THREE.MeshBasicMaterial({ color: 0x030308 })
+  );
+  g.add(voidCore);
+  const rim = new THREE.Mesh(
+    new THREE.SphereGeometry(3.55 * scale, 18, 14),
+    new THREE.MeshBasicMaterial({
+      color: COLD,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  g.add(rim);
+  for (const [inner, outer, op, tilt] of [
+    [4.2, 6.8, 0.55, 1.55],
+    [5.0, 7.6, 0.28, 1.35],
+  ]) {
+    const disk = new THREE.Mesh(
+      new THREE.RingGeometry(inner * scale, outer * scale, 48),
+      new THREE.MeshBasicMaterial({
+        color: AMBER,
+        transparent: true,
+        opacity: op,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })
+    );
+    disk.rotation.x = Math.PI / tilt;
+    g.add(disk);
+  }
+  // warped cold spokes
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const spoke = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25 * scale, 0.25 * scale, 5.5 * scale),
+      mat(COLD, { emissive: COLD, ei: 0.35, metal: 0.1, rough: 0.5 })
+    );
+    spoke.position.set(Math.cos(a) * 2.2 * scale, 0, Math.sin(a) * 2.2 * scale);
+    spoke.lookAt(0, 0, 0);
+    g.add(spoke);
+  }
+  return g;
+}

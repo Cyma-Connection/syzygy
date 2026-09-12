@@ -7,7 +7,7 @@ import { ASSET } from './assetlib.js';
 import { createSpaceAudio } from './audio.js';
 import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js';
 import { createVfx } from './vfx.js';
-import { createPlanet, createStar, createDebris } from './objects.js';
+import { createPlanet, createStar, createDebris, createBlackHole } from './objects.js';
 import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js';
 import { t, applyDom, toggleLang, coachScreens, getLang } from './i18n.js';
 
@@ -18,7 +18,7 @@ const GOOD = 0x5ad67a;
 const BAD = 0xff4d6a;
 
 const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', OVER: 'OVER' };
-const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris' };
+const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', HOLE: 'hole' };
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
 const CRAFT_R = 95;
 const INNER_MIN = 42;
@@ -69,6 +69,8 @@ let autoAlignReady = false;
 let autoAlignActive = false;
 let autoAlignTimer = 0;
 let autoAlignCd = 0;
+let dodgeCd = 0;
+let dodgeBoost = 0; // seconds of boosted orbit jump
 let autoAlignUnlocked = false;
 
 let pointers = new Map();
@@ -112,6 +114,7 @@ function waveParams(w) {
     perWave: 5,
     maxObjects: Math.min(12, 5 + Math.floor(w / 2)),
     debrisChance: Math.min(0.18, 0.04 + w * 0.015),
+    holeChance: w < 4 ? 0 : Math.min(0.16, 0.04 + (w - 3) * 0.012),
   };
 }
 
@@ -137,12 +140,15 @@ function updateHud() {
   if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
   const btn = $('snapBtn');
   if (btn) {
-    const hot = align >= goodBand(wave) && bestTarget && bestTarget.kind !== KIND.DEBRIS;
+    const hazardous = bestTarget && (bestTarget.kind === KIND.DEBRIS || bestTarget.kind === KIND.HOLE);
+    const hot = align >= goodBand(wave) && bestTarget && !hazardous;
     const danger = align >= 0.55 && bestTarget && bestTarget.kind === KIND.DEBRIS;
-    const near = align >= 0.5 && !hot && !danger;
+    const holeWarn = align >= 0.5 && bestTarget && bestTarget.kind === KIND.HOLE;
+    const near = align >= 0.5 && !hot && !danger && !holeWarn;
     btn.classList.toggle('hot', hot);
     btn.classList.toggle('near', near);
     btn.classList.toggle('danger', danger);
+    btn.classList.toggle('hole', holeWarn);
     const t = Math.max(0, Math.min(1, (align - 0.35) / 0.65));
     btn.style.setProperty('--snap-pulse', `${(0.9 - t * 0.6).toFixed(2)}s`);
   }
@@ -279,7 +285,7 @@ function clearWorld() {
 }
 
 function countScoring() {
-  return world.filter((o) => o.kind !== KIND.DEBRIS).length;
+  return world.filter((o) => o.kind !== KIND.DEBRIS && o.kind !== KIND.HOLE).length;
 }
 
 function pickKind(boss) {
@@ -292,10 +298,13 @@ function pickKind(boss) {
     if (r < 0.8) return KIND.PLANET;
     return KIND.STAR;
   }
+  const holes = world.filter((o) => o.kind === KIND.HOLE).length;
   const r = Math.random();
-  if (r < p.debrisChance) return KIND.DEBRIS;
-  if (r < p.debrisChance + 0.2) return KIND.PLANET;
-  if (r < p.debrisChance + 0.38) return KIND.STAR;
+  if (p.holeChance > 0 && holes < 2 && r < p.holeChance) return KIND.HOLE;
+  const r2 = Math.random();
+  if (r2 < p.debrisChance) return KIND.DEBRIS;
+  if (r2 < p.debrisChance + 0.2) return KIND.PLANET;
+  if (r2 < p.debrisChance + 0.38) return KIND.STAR;
   return KIND.RELIC;
 }
 
@@ -335,6 +344,8 @@ function makeObject(kind, boss) {
     mesh = createPlanet(boss ? 1.4 : 0.85 + Math.random() * 0.3);
   } else if (kind === KIND.STAR) {
     mesh = createStar(boss ? 1.3 : 0.75 + Math.random() * 0.25);
+  } else if (kind === KIND.HOLE) {
+    mesh = createBlackHole(0.85 + Math.random() * 0.25);
   } else {
     mesh = createDebris(0.9 + Math.random() * 0.4);
   }
@@ -419,6 +430,9 @@ function updateSyzygyGuide() {
   if (bestTarget && bestTarget.kind === KIND.DEBRIS && a > 0.5) {
     mat.color.setHex(BAD);
     mat.opacity = 0.15 + a * 0.55;
+  } else if (bestTarget && bestTarget.kind === KIND.HOLE && a > 0.45) {
+    mat.color.setHex(COLD);
+    mat.opacity = 0.2 + a * 0.5;
   } else if (a > 0.45) {
     mat.color.setHex(a >= goodBand(wave) ? GOOD : COLD);
     mat.opacity = 0.12 + (a - 0.45) * 0.9;
@@ -455,7 +469,7 @@ function stackBonus(primary) {
   let bonus = 1;
   const tags = [];
   for (const o of world) {
-    if (o === primary || o.kind === KIND.DEBRIS) continue;
+    if (o === primary || o.kind === KIND.DEBRIS || o.kind === KIND.HOLE) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) {
       if (o.kind === KIND.PLANET) { bonus += 0.5; tags.push('PLANET'); }
@@ -465,6 +479,24 @@ function stackBonus(primary) {
   }
   return { bonus, tags };
 }
+
+
+  const dg = $('btnDodge');
+  if (dg) {
+    const ready = dodgeCd <= 0 && dodgeBoost <= 0;
+    dg.classList.toggle('ready', ready);
+    dg.classList.toggle('cd', dodgeCd > 0);
+    dg.classList.toggle('active', dodgeBoost > 0);
+    const label = dodgeBoost > 0 ? '…' : (dodgeCd > 0 ? `${Math.ceil(dodgeCd)}s` : t('dodge'));
+    const ch = $('dodgeCharge');
+    dg.textContent = label;
+    if (ch) {
+      dg.appendChild(ch);
+      if (dodgeBoost > 0) ch.style.width = '100%';
+      else if (dodgeCd > 0) ch.style.width = `${Math.max(0, (1 - dodgeCd / 5) * 100)}%`;
+      else ch.style.width = '100%';
+    }
+  }
 
 function flashHp() {
   const w = $('hpWrap');
@@ -504,6 +536,19 @@ function doSnap() {
 
   if (!target || align < 0.45) {
     failLife(align < 0.2 ? 'NO SYZYGY' : 'WEAK ALIGN');
+    return;
+  }
+
+  if (target.kind === KIND.HOLE) {
+    audio.stingMiss();
+    failLife('BLACK HOLE');
+    camShake = 0.7;
+    if (vfx) {
+      vfx.shatterAt(target.mesh.position.clone(), COLD, 20, 1.3);
+      vfx.lockBurst(target.mesh.position.clone(), COLD);
+    }
+    // hole stays — danger remains
+    updateHud();
     return;
   }
 
@@ -564,7 +609,7 @@ function doSnap() {
   // Consume primary; also consume stacked allies on the ray for juice
   const toRemove = [target];
   for (const o of world) {
-    if (o === target || o.kind === KIND.DEBRIS) continue;
+    if (o === target || o.kind === KIND.DEBRIS || o.kind === KIND.HOLE) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) toRemove.push(o);
   }
@@ -651,6 +696,28 @@ function applySunGrowth() {
   }
 }
 
+
+function doDodge() {
+  if (!started || over || endingCinematic) return;
+  if (dodgeCd > 0 || dodgeBoost > 0) return;
+  dodgeBoost = 0.35;
+  dodgeCd = 5;
+  audio.stingLock?.();
+  setHint(t('dodge'));
+  camPunch = 0.25;
+  // Jump ahead along orbit to slip past a hole
+  craftTheta += orbitDir * 0.55;
+  updateHud();
+}
+
+function tickDodge(dt) {
+  if (dodgeBoost > 0) {
+    dodgeBoost = Math.max(0, dodgeBoost - dt);
+    craftTheta += orbitDir * 2.8 * dt; // extra slip while boosting
+  }
+  if (dodgeCd > 0) dodgeCd = Math.max(0, dodgeCd - dt);
+}
+
 function activateAutoAlign() {
   if (!started || over || !autoAlignUnlocked || !autoAlignReady || autoAlignActive || autoAlignCd > 0) return;
   autoAlignActive = true;
@@ -674,7 +741,7 @@ function tickAutoAlign(dt) {
   let best = null;
   let bestD = 99;
   for (const o of world) {
-    if (o.kind === KIND.DEBRIS) continue;
+    if (o.kind === KIND.DEBRIS || o.kind === KIND.HOLE) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     const d = angDiff(craftTheta, o.theta);
     if (d < bestD) { bestD = d; best = o; }
@@ -723,6 +790,8 @@ function startRun() {
   autoAlignActive = false;
   autoAlignTimer = 0;
   autoAlignCd = 0;
+  dodgeCd = 0;
+  dodgeBoost = 0;
   slowMo = 0;
   updateHeatVisual();
   $('start')?.classList.remove('on');
@@ -1009,6 +1078,7 @@ function bindInput(canvas) {
   }, { passive: false });
 
   $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
+  $('btnDodge')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doDodge(); });
   $('btnAutoAlign')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); });
   $('btnHelp')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -1113,9 +1183,11 @@ function tickBot() {
   if (freezeFrames > 0) return;
   computeAlignment();
   if (!bestTarget) return;
-  // Never SNAP debris; wait for a scoring target
+  if (bestTarget.kind === KIND.HOLE && align >= 0.45) {
+    doDodge();
+    return;
+  }
   if (bestTarget.kind === KIND.DEBRIS) return;
-  // Snap when alignment is at least "good" (same band as green SNAP)
   if (align >= goodBand(wave)) doSnap();
   if (autoAlignUnlocked && autoAlignReady && autoAlignCd <= 0 && !autoAlignActive && align >= 0.6) {
     activateAutoAlign();
@@ -1180,17 +1252,18 @@ function frame(now) {
     craftTheta += orbitDir * spd * dt;
 
     tickAutoAlign(dt);
+    tickDodge(dt);
     computeAlignment();
     tickBot();
 
     // Rising align tone feedback
     if (audio.setAlignTone) {
-      const want = (align >= 0.45 && bestTarget && bestTarget.kind !== KIND.DEBRIS) ? align : 0;
+      const want = (align >= 0.45 && bestTarget && bestTarget.kind !== KIND.DEBRIS && bestTarget.kind !== KIND.HOLE) ? align : 0;
       audio.setAlignTone(want);
     }
 
     // Near-miss sparks for relics approaching sweet spot
-    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.42 && align < 0.55 && vfx && Math.random() < dt * 16) {
+    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && bestTarget.kind !== KIND.HOLE && align >= 0.42 && align < 0.55 && vfx && Math.random() < dt * 16) {
       vfx.nearMissBurst(bestTarget.mesh.position);
     }
 
@@ -1199,6 +1272,7 @@ function frame(now) {
       o.mesh.rotation.y += o.spin * dt;
       if (o.kind === KIND.STAR) o.mesh.rotation.z += o.spin * 0.7 * dt;
       if (o.kind === KIND.DEBRIS) o.mesh.rotation.x += o.spin * 1.2 * dt;
+      if (o.kind === KIND.HOLE) o.mesh.rotation.y += o.spin * 0.35 * dt;
     }
 
     updateHud();

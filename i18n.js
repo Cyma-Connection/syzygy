@@ -3,7 +3,7 @@ const STR = {
   en: {
     loadmsg: 'calibrating ORBIT…',
     startTitle: 'ORBIT SNAP',
-    startBody: 'Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 PERFECT unlock <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.',
+    startBody: 'Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 PERFECT unlock <b style="color:var(--cold)">LOCK</b>. Black holes: <b style="color:#c8c2b4">DODGE</b>. Pinch = zoom.',
     play: 'PLAY',
     leaderboard: 'LEADERBOARD',
     ranks: 'RANKS',
@@ -41,11 +41,12 @@ const STR = {
     langBtn: 'FR',
     overRankNote: 'YOUR RUN · LOCAL RANKS',
     hull: 'HULL',
+    dodge: 'DODGE',
   },
   fr: {
     loadmsg: 'calibration ORBIT…',
     startTitle: 'ORBIT SNAP',
-    startBody: 'Ton craft orbite. <b style="color:var(--amber)">Sens</b> l’alignement soleil→objet, puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. 3 PARFAIT débloquent <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.',
+    startBody: 'Ton craft orbite. <b style="color:var(--amber)">Sens</b> l’alignement soleil→objet, puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. 3 PARFAIT débloquent <b style="color:var(--cold)">LOCK</b>. Trous noirs : <b style="color:#c8c2b4">ESQUIVE</b>. Pinch = zoom.',
     play: 'JOUER',
     leaderboard: 'CLASSEMENT',
     ranks: 'RANGS',
@@ -83,6 +84,7 @@ const STR = {
     langBtn: 'EN',
     overRankNote: 'TA RUN · CLASSEMENT LOCAL',
     hull: 'COQUE',
+    dodge: 'ESQUIVE',
   },
 };
 
