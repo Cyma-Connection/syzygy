@@ -50,7 +50,7 @@
     #hud.on { display:block; }
     #top { position:absolute; left:0; right:0; top:max(10px, env(safe-area-inset-top));
       display:flex; justify-content:space-between; align-items:flex-start;
-      padding:0 62px 0 14px; font-size:12px; letter-spacing:.14em;
+      padding:0 62px 0 58px; font-size:12px; letter-spacing:.14em;
       text-shadow:0 2px 8px #000; z-index:12; }
     #scoreBox { color:var(--amber); }
     #waveCol { text-align:center; }
@@ -60,6 +60,10 @@
       transform:translateX(-50%); font-size:11px; letter-spacing:.24em; color:var(--amber);
       opacity:0; pointer-events:none; text-shadow:0 0 16px rgba(232,160,74,.7); }
     #heatBadge.on { opacity:1; }
+    #btnHelp { pointer-events:auto; position:absolute; left:max(14px, env(safe-area-inset-left));
+      top:max(10px, env(safe-area-inset-top)); width:40px; height:40px; border-radius:10px;
+      border:1px solid #556; background:rgba(10,12,20,.85); color:#cfd6e6; font:inherit;
+      font-size:16px; cursor:pointer; z-index:20; }
     #btnLang { pointer-events:auto; position:absolute; right:max(14px, env(safe-area-inset-right));
       top:max(10px, env(safe-area-inset-top)); width:44px; height:44px; border-radius:10px;
       border:1px solid #556; background:rgba(10,12,20,.85); color:#cfd6e6; font:inherit;
@@ -153,6 +157,7 @@
 <body>
   <canvas id="c"></canvas>
   <div id="fx"></div>
+  <button type="button" id="btnHelp" title="Tutorial">?</button>
   <button type="button" id="btnLang" title="Language">FR</button>
   <button type="button" id="btnMute" title="Mute">♪ SOUND</button>
 

@@ -214,13 +214,50 @@ function paintCoach() {
 }
 window.__syzygyPaintCoach = paintCoach;
 
+
+let helpReturnTo = null; // 'start' | 'hud'
+
+function openHelpCoach() {
+  // Pause play presentation: keep state but hide hud / start under coach
+  if (started && !over && state === STATE.PLAY) {
+    helpReturnTo = 'hud';
+    $('hud')?.classList.remove('on');
+  } else {
+    helpReturnTo = 'start';
+    $('start')?.classList.remove('on');
+    $('board')?.classList.remove('on');
+    $('over')?.classList.remove('on');
+  }
+  coachIdx = 0;
+  paintCoach();
+  $('coachFlow')?.classList.add('on');
+}
+
+function closeHelpCoach() {
+  $('coachFlow')?.classList.remove('on');
+  if (helpReturnTo === 'hud') {
+    $('hud')?.classList.add('on');
+  } else {
+    $('start')?.classList.add('on');
+  }
+  helpReturnTo = null;
+}
+
 function advanceCoach() {
   audio.start();
   coachIdx += 1;
   if (coachIdx >= coachScreens().length) {
     localStorage.setItem('syzygy_coach_v1', '1');
     $('coachFlow')?.classList.remove('on');
-    $('start')?.classList.add('on');
+    if (helpReturnTo === 'hud') {
+      $('hud')?.classList.add('on');
+      helpReturnTo = null;
+    } else if (helpReturnTo === 'start') {
+      $('start')?.classList.add('on');
+      helpReturnTo = null;
+    } else {
+      $('start')?.classList.add('on');
+    }
     return;
   }
   paintCoach();
@@ -973,6 +1010,10 @@ function bindInput(canvas) {
 
   $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
   $('btnAutoAlign')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); });
+  $('btnHelp')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openHelpCoach();
+  });
   $('btnLang')?.addEventListener('click', (e) => {
     e.preventDefault();
     toggleLang();
