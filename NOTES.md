@@ -1,20 +1,18 @@
-# NOTES — deferred
+# NOTES
 
-## Done (scaffold)
-- Self-contained folder, relative imports
-- Style / design / asset docs
-- Stub assets (8) + expect JSON
-- assetlib.js / surfaces.js copied from recipe harness
+## Shipped
 - Orbit drag (pointer/touch) moves craft in metres
-- __READY__ / __START__ / __GAME__ wired
-- Amber ghost + filament hint
+- Tap relic → tether / untether (max 2)
+- Syzygy when two tethered relics align through the sun (≤ 4°)
+- Light tunnel + 2s camera travelling + constellation star
+- Minute‑1 forced pair (frozen, ~2° apart) + amber ghost
+- 6‑minute sun death → COLLAPSE; 5 locks → WIN
+- Hold-sun ghost help after 2nd lock (0.6s)
+- Secret: five locks in spectral order 0→4 → 404‑AURIGA
+- Jam hooks: `__READY__`, `__START__`, `__GAME__`
 
 ## Next
-1. Real 404 verify loop per asset (3 candidates, pick by eye)
-2. Tether tap on relics + syzygy cone (4°) + light tunnels
-3. 6-minute sun collapse + win at 5 locks + spectral secret
-4. Minute-1 forced first syzygy + 2s beam travelling
-5. Custom jam gate driver (touch drag), not keyboard playtest.mjs
-6. Audio as physics (interference → lock chord)
-7. GitHub Pages (or other) public URL + `node harness/jam.mjs <url>`
-8. PR to 404-Repo/404-game-jam with verdict block
+1. Real 404 verify loop per asset (stubs still ship)
+2. Custom `jam.mjs` touch driver
+3. Audio as physics (interference → lock chord)
+4. GitHub Pages + gate verdict + PR to 404-game-jam
