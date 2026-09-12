@@ -137,18 +137,6 @@
     #autoCharge { position:absolute; left:0; bottom:0; height:4px; width:0%; background:var(--cold);
       box-shadow:0 0 8px rgba(107,140,255,.6); pointer-events:none; }
 
-    #btnDodge { pointer-events:auto; position:relative; width:72px; height:72px; border-radius:50%;
-      border:2px solid rgba(230,220,200,.35); background:radial-gradient(circle at 40% 35%, rgba(26,26,30,.95), rgba(6,8,14,.92));
-      color:#c8c2b4; font:inherit; font-size:10px; letter-spacing:.14em; cursor:pointer;
-      box-shadow:0 0 18px rgba(107,140,255,.12); overflow:hidden; margin-bottom:12px; }
-    #btnDodge.ready { border-color:var(--cold); color:var(--cold); box-shadow:0 0 26px rgba(107,140,255,.4);
-      animation: pulseSnap 1s ease-in-out infinite; }
-    #btnDodge.cd { opacity:.55; }
-    #btnDodge.active { border-color:#e6dcc8; color:#e6dcc8; }
-    #dodgeCharge { position:absolute; left:0; bottom:0; height:4px; width:0%; background:var(--cold);
-      box-shadow:0 0 8px rgba(107,140,255,.5); pointer-events:none; }
-    #snapBtn.hole { border-color:#9aa3b5; color:#9aa3b5; box-shadow:0 0 28px rgba(107,140,255,.35);
-      animation: pulseSnap 0.35s ease-in-out infinite; }
 
     #coach { display:none !important; }
     @media (max-width:600px){ #coach{ display:none } }
@@ -230,7 +218,6 @@
     <div id="controls">
       <button id="btnAutoAlign" type="button" class="locked" title="Auto-align LOCK">LOCK<span id="autoCharge"></span></button>
       <button id="snapBtn" type="button">SNAP</button>
-      <button id="btnDodge" type="button" class="ready" title="Dodge black hole">DODGE<span id="dodgeCharge"></span></button>
     </div>
   </div>
 
