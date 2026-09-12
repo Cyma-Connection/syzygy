@@ -29,11 +29,7 @@ export function createSpaceAudio() {
 
   /** Same notes, lower register as the run gets intense. */
   function transposeSemis() {
-    // Wave 1–9: 0 · approaching 10: ease to -5 · 10–19: -5 · →20: -10 · 20+: -12
-    const w = waveLayer;
-    if (w >= 20) return -12;
-    if (w >= 10) return -5 - Math.min(5, (w - 10) * 0.5); // -5 … -10 toward 20
-    if (w >= 7) return -((w - 6) * 1.25); // gentle preview -1.25…-3.75
+    // Locked to base register — no deepening with waves
     return 0;
   }
 
@@ -44,14 +40,12 @@ export function createSpaceAudio() {
   function applyPadTranspose() {
     if (!ctx || !padOsc.length) return;
     const t = ctx.currentTime;
-    const mul = Math.pow(2, transposeSemis() / 12);
-    // speed used to lift pitch — invert: faster → slightly deeper within the wave band
-    const speedDark = 1 - Math.min(0.08, Math.max(0, speedNorm - 0.5) * 0.06);
+    // Always base pitch (mul=1); speed only accelerates rhythm elsewhere
     for (const p of padOsc) {
-      p.o.frequency.setTargetAtTime(p.base * mul * speedDark, t, 0.8);
+      p.o.frequency.setTargetAtTime(p.base, t, 0.5);
     }
     if (bassOsc) {
-      bassOsc.frequency.setTargetAtTime((ROOT / 2) * mul * speedDark, t, 0.8);
+      bassOsc.frequency.setTargetAtTime(ROOT / 2, t, 0.5);
     }
   }
 
@@ -69,7 +63,7 @@ export function createSpaceAudio() {
     music.connect(master);
 
     sfx = ctx.createGain();
-    sfx.gain.value = 1.0;
+    sfx.gain.value = 0.55; // quieter FX under music
     sfx.connect(master);
 
     bassGain = ctx.createGain();
@@ -233,9 +227,9 @@ export function createSpaceAudio() {
 
     // Loud unlock cue — if you don't hear this, audio is still blocked
     if (!muted) {
-      beep(523.25, t + 0.05, 0.15, 'sine', 0.35, sfx); // C5
-      beep(659.25, t + 0.12, 0.2, 'sine', 0.28, sfx);  // E5
-      beep(783.99, t + 0.22, 0.28, 'sine', 0.22, sfx); // G5
+      beep(523.25, t + 0.05, 0.15, 'sine', 0.22, sfx); // C5
+      beep(659.25, t + 0.12, 0.2, 'sine', 0.18, sfx);  // E5
+      beep(783.99, t + 0.22, 0.28, 'sine', 0.14, sfx); // G5
     }
     startLoop();
   }
@@ -286,32 +280,32 @@ export function createSpaceAudio() {
   function stingPerfect() {
     if (!ctx || muted) return;
     const t = ctx.currentTime;
-    beep(523.25, t, 0.2, 'sine', 0.4, sfx);
-    beep(659.25, t + 0.06, 0.22, 'sine', 0.32, sfx);
-    beep(783.99, t + 0.12, 0.28, 'sine', 0.26, sfx);
-    beep(1046.5, t + 0.2, 0.35, 'triangle', 0.18, sfx);
+    beep(523.25, t, 0.2, 'sine', 0.26, sfx);
+    beep(659.25, t + 0.06, 0.22, 'sine', 0.2, sfx);
+    beep(783.99, t + 0.12, 0.28, 'sine', 0.16, sfx);
+    beep(1046.5, t + 0.2, 0.35, 'triangle', 0.1, sfx);
   }
   function stingGood() {
     if (!ctx || muted) return;
     const t = ctx.currentTime;
-    beep(392, t, 0.2, 'sine', 0.35, sfx);
-    beep(493.88, t + 0.08, 0.25, 'sine', 0.28, sfx);
+    beep(392, t, 0.2, 'sine', 0.22, sfx);
+    beep(493.88, t + 0.08, 0.25, 'sine', 0.18, sfx);
   }
   function stingOk() {
     if (!ctx || muted) return;
-    beep(349.23, ctx.currentTime, 0.22, 'sine', 0.3, sfx);
+    beep(349.23, ctx.currentTime, 0.22, 'sine', 0.18, sfx);
   }
   function stingMiss() {
     if (!ctx || muted) return;
     const t = ctx.currentTime;
-    beep(180, t, 0.25, 'triangle', 0.35, sfx);
-    beep(120, t + 0.05, 0.35, 'sine', 0.3, sfx);
+    beep(180, t, 0.25, 'triangle', 0.2, sfx);
+    beep(120, t + 0.05, 0.35, 'sine', 0.18, sfx);
   }
   function stingDebris() {
     if (!ctx || muted) return;
     const t = ctx.currentTime;
-    beep(220, t, 0.18, 'square', 0.28, sfx);
-    beep(90, t + 0.04, 0.4, 'sawtooth', 0.32, sfx);
+    beep(220, t, 0.18, 'square', 0.16, sfx);
+    beep(90, t + 0.04, 0.4, 'sawtooth', 0.18, sfx);
   }
   function stingWave() {
     if (!ctx || muted) return;
