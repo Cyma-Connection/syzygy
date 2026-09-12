@@ -57,12 +57,17 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
 
       void main() {
         vec3 n = normalize(vPos);
-        float neb = fbm(n * 2.2 + vec3(uTime * 0.015, 0.0, uTime * 0.01));
-        float band = smoothstep(0.35, 0.75, neb);
-        vec3 col = mix(vec3(0.02, 0.025, 0.05), uCold * 0.35, band);
-        col = mix(col, uAmber * 0.28, smoothstep(0.55, 0.9, neb) * (0.5 + 0.5 * n.y));
-        float poles = pow(abs(n.y), 1.4);
-        col += uCold * 0.08 * poles;
+        float neb = fbm(n * 2.6 + vec3(uTime * 0.012, 0.0, uTime * 0.009));
+        float neb2 = fbm(n * 5.0 - vec3(uTime * 0.02, 0.4, 0.0));
+        float dark = smoothstep(0.55, 0.15, neb);
+        float band = smoothstep(0.42, 0.82, neb);
+        float hot = smoothstep(0.62, 0.95, neb * 0.7 + neb2 * 0.5);
+        vec3 col = mix(vec3(0.008, 0.01, 0.02), vec3(0.03, 0.04, 0.08), 1.0 - dark);
+        col = mix(col, uCold * 0.42, band * (1.0 - hot));
+        col = mix(col, uAmber * 0.38, hot * (0.45 + 0.55 * clamp(n.y + 0.2, 0.0, 1.0)));
+        col *= 0.55 + 0.45 * dark; // deeper voids
+        float poles = pow(abs(n.y), 1.6);
+        col += uCold * 0.06 * poles;
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -142,21 +147,38 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
 
 export function createSunGlow(amber = 0xe8a04a) {
   const g = new THREE.Group();
-  const spriteMat = (scale, opacity, color) => {
+  const shell = (scale, opacity, color, seg = 20) => {
     const m = new THREE.Mesh(
-      new THREE.SphereGeometry(scale, 16, 12),
+      new THREE.SphereGeometry(scale, seg, Math.max(10, seg - 4)),
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
         opacity,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
       })
     );
     return m;
   };
-  g.add(spriteMat(22, 0.22, amber));
-  g.add(spriteMat(30, 0.1, amber));
-  g.add(spriteMat(38, 0.05, 0x6b8cff));
+  // volumetric-ish stacked additive shells (no textures)
+  g.add(shell(21, 0.2, amber, 24));
+  g.add(shell(26, 0.14, amber, 20));
+  g.add(shell(32, 0.09, amber, 18));
+  g.add(shell(40, 0.05, 0x6b8cff, 16));
+  g.add(shell(48, 0.03, 0x6b8cff, 14));
+  // equatorial torus glow
+  const torus = new THREE.Mesh(
+    new THREE.TorusGeometry(24, 1.8, 10, 48),
+    new THREE.MeshBasicMaterial({
+      color: amber,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+  );
+  torus.rotation.x = Math.PI / 2;
+  g.add(torus);
   return g;
 }
