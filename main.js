@@ -984,18 +984,32 @@ function bindInput(canvas) {
       console.warn(err);
       $('btnSubmit').textContent = t('localSaved');
     }
-    renderOverRanks();
+    renderOverRanks({ saved: true });
   });
 }
 
-function renderOverRanks() {
+function renderOverRanks(opts = {}) {
   const el = $('overLb');
   if (!el) return;
   const note = $('overRankNote');
   if (note) note.textContent = t('overRankNote');
   const rows = loadLocal();
-  // Preview: insert this run (unsaved) so player sees where they land
-  const preview = [...rows, { name: 'YOU', score, wave, _you: true }];
+  const saved = !!opts.saved;
+  const tag = (($('nameIn')?.value || localStorage.getItem('syzygy_tag') || 'YOU')).trim().slice(0, 12).toUpperCase() || 'YOU';
+  // Preview current run unless already saved into local list this over-screen
+  let preview = rows.map((r) => ({ ...r }));
+  if (!saved) {
+    preview.push({ name: tag || 'YOU', score, wave, _you: true });
+  } else {
+    // highlight matching top score with this tag
+    let marked = false;
+    for (const r of preview) {
+      if (!marked && r.name === tag && r.score === Math.floor(score)) {
+        r._you = true;
+        marked = true;
+      }
+    }
+  }
   preview.sort((a, b) => b.score - a.score);
   const top = preview.slice(0, 12);
   if (!top.length) {
