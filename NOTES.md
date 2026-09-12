@@ -23,3 +23,7 @@ Major pivot (2026-09-12): auto-orbit craft; feel alignment; SNAP. Kept polish (w
 
 ## Polish (2026-09-12)
 - Synth speed line, larger halo craft, big KO boom, **5 lives**, gentler early orbit / wider Perfect.
+
+## Polish (camera + audio mix)
+- Camera: craft anchored **bottom-center** (outside-orbit rail); pinch/wheel zoom to scout ahead.
+- Audio: louder brass-obsidian bed + crystalline arp; SFX bus lowered under music; mute intact.

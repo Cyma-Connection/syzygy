@@ -654,7 +654,7 @@ async function boot() {
 
   camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 1000);
   camDist = 110;
-  camera.position.set(0, 32, camDist);
+  camera.position.set(0, 48, 95 + 50); // outside craft orbit, elevated rail
 
   spacefx = createSpaceBackdrop(scene, { amber: AMBER, cold: COLD });
   scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.5));
@@ -813,6 +813,12 @@ function bindInput(canvas) {
   window.addEventListener('pointerup', up);
   window.addEventListener('pointercancel', up);
   canvas.addEventListener('touchstart', (e) => { e.preventDefault(); }, { passive: false });
+  // Desktop: wheel zoom (same range as pinch) to scout the orbit ahead
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    zoom = THREE.MathUtils.clamp(zoom + Math.sign(e.deltaY) * 0.08, 0.55, 1.85);
+    camDist = 70 + zoom * 70;
+  }, { passive: false });
 
   $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
   $('btnAutoAlign')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); });
@@ -962,22 +968,25 @@ function frame(now) {
   }
 
   if (camera) {
-    // Bias look-at toward craft so silhouette + aim line stay readable vs sun
-    const craftFocus = craft
-      ? craft.position.clone().multiplyScalar(0.55).setY(6)
-      : new THREE.Vector3(Math.cos(craftTheta) * 50, 6, Math.sin(craftTheta) * 50);
-    let dist = camDist;
+    // Rail / cockpit framing: craft stays bottom-center; world sweeps past.
+    // Camera sits outside the craft orbit looking inward (+ slight look-ahead).
+    const craftR = 95;
+    const z = THREE.MathUtils.clamp(zoom, 0.55, 1.85);
+    // zoom↑ = pull back + wider FOV to anticipate orbit ahead
+    const out = 18 + z * 48;          // radial distance beyond craft
+    const height = 26 + z * 28;       // elevated for bottom-third craft
+    let punch = 0;
     if (camPunch > 0) {
       const punchMax = endingCinematic ? 1.1 : 0.35;
       camPunch = Math.max(0, camPunch - dt);
       const u = 1 - camPunch / Math.max(0.2, punchMax);
-      dist += Math.sin(u * Math.PI) * (endingCinematic ? 28 : 14);
+      punch = Math.sin(u * Math.PI) * (endingCinematic ? 22 : 10);
     }
-    // Orbit slightly behind craft so ship sits mid-frame with sun left/right
+    const camR = craftR + out + punch;
     const camGoal = new THREE.Vector3(
-      Math.cos(craftTheta + 0.75) * dist,
-      22 + (1.2 - zoom) * 12,
-      Math.sin(craftTheta + 0.75) * dist
+      Math.cos(craftTheta) * camR,
+      height,
+      Math.sin(craftTheta) * camR
     );
     if (camShake > 0) {
       camShake = Math.max(0, camShake - dt);
@@ -985,9 +994,17 @@ function frame(now) {
       camGoal.x += (Math.random() - 0.5) * amp * camShake;
       camGoal.y += (Math.random() - 0.5) * amp * camShake;
     }
-    camera.position.lerp(camGoal, 1 - Math.exp(-3.4 * dt));
-    camera.lookAt(craftFocus.x, craftFocus.y, craftFocus.z);
-    camera.fov = THREE.MathUtils.lerp(camera.fov, 46 + zoom * 9, 0.1);
+    // Look toward sun, slightly ahead on the orbit — craft projects bottom-center
+    const lookAhead = orbitDir * (0.12 + (z - 0.55) * 0.1);
+    const lookR = 28 + (1.85 - z) * 22; // farther look when zoomed out
+    const lookAt = new THREE.Vector3(
+      Math.cos(craftTheta + lookAhead) * lookR,
+      5 + (1.2 - Math.min(z, 1.2)) * 4,
+      Math.sin(craftTheta + lookAhead) * lookR
+    );
+    camera.position.lerp(camGoal, 1 - Math.exp(-4.2 * dt));
+    camera.lookAt(lookAt.x, lookAt.y, lookAt.z);
+    camera.fov = THREE.MathUtils.lerp(camera.fov, 42 + z * 14, 0.12);
     camera.updateProjectionMatrix();
   }
 
