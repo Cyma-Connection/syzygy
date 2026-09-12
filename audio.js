@@ -355,7 +355,9 @@ export function createSpaceAudio() {
     stingExplosion,
     get muted() { return muted; },
     get ctxState() { return ctx ? ctx.state : 'none'; },
-    get transposeSemis() { return transposeSemis(); },
-    get rootHz() { return rootHz(); },
+    transposeSemis,
+    rootHz,
+    getTransposeSemis: transposeSemis,
+    getRootHz: rootHz,
   };
 }

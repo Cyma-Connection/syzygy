@@ -1081,7 +1081,12 @@ function tickBot() {
 function publishGame() {
   const info = renderer ? renderer.info.render : { calls: 0, triangles: 0 };
   if (botOn) {
-    document.title = `BOT w${wave} sc${score} lv${lives} spd${(Math.abs(orbitSpeed)*40)|0} ${over?'OVER':'PLAY'} tr${audio.transposeSemis?.() ?? '?'}`;
+    try {
+      const tr = (typeof audio.getTransposeSemis === 'function')
+        ? audio.getTransposeSemis()
+        : (audio.transposeSemis ?? '?');
+      document.title = `BOT w${wave} sc${score} lv${lives} spd${(Math.abs(orbitSpeed)*40)|0} ${over?'OVER':'PLAY'} tr${tr}`;
+    } catch (_) {}
   }
   window.__GAME__ = {
     pos: craft ? [craft.position.x, craft.position.z] : [0, 0],
