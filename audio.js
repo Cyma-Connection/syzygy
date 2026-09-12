@@ -91,15 +91,21 @@ export function createSpaceAudio() {
       o.start();
     }
 
-    // Align cue (quiet until alignment rises)
+    // Soft align breath (gentle low sine + heavy LP — not a rising alarm)
     alignOsc = ctx.createOscillator();
     alignOsc.type = 'sine';
-    alignOsc.frequency.value = 660;
+    alignOsc.frequency.value = 196; // G3 — warm, not piercing
+    const alignLp = ctx.createBiquadFilter();
+    alignLp.type = 'lowpass';
+    alignLp.frequency.value = 480;
+    alignLp.Q.value = 0.4;
     alignGain = ctx.createGain();
     alignGain.gain.value = 0.0001;
-    alignOsc.connect(alignGain);
+    alignOsc.connect(alignLp);
+    alignLp.connect(alignGain);
     alignGain.connect(sfx);
     alignOsc.start();
+    alignOsc._lp = alignLp;
   }
 
   function beep(freq, when, dur, type, gain, dest) {
@@ -228,8 +234,13 @@ export function createSpaceAudio() {
   function setAlign(level) {
     if (!ctx || !alignGain) return;
     const a = Math.max(0, Math.min(1, level));
-    alignGain.gain.setTargetAtTime(0.0001 + a * a * 0.05, ctx.currentTime, 0.05);
-    alignOsc.frequency.setTargetAtTime(550 + a * 400, ctx.currentTime, 0.08);
+    const t = ctx.currentTime;
+    // Soft swell only — tiny pitch lift, never a scream
+    alignGain.gain.setTargetAtTime(0.0001 + a * a * 0.028, t, 0.18);
+    alignOsc.frequency.setTargetAtTime(180 + a * 90, t, 0.25); // ~180–270 Hz
+    if (alignOsc._lp) {
+      alignOsc._lp.frequency.setTargetAtTime(360 + a * 200, t, 0.2);
+    }
   }
   function setAlignTone(level) { setAlign(level); }
 
