@@ -110,8 +110,8 @@ function waveParams(w) {
     baseSpeed: 0.40 + w * 0.065,
     soft: Math.max(0.12, 0.34 - w * 0.011),
     perWave: 5,
-    maxObjects: Math.min(8, 3 + Math.floor(w / 2)),
-    debrisChance: Math.min(0.26, 0.05 + w * 0.02),
+    maxObjects: Math.min(12, 5 + Math.floor(w / 2)),
+    debrisChance: Math.min(0.18, 0.04 + w * 0.015),
   };
 }
 
@@ -249,7 +249,7 @@ function pickKind(boss) {
   if (boss) return KIND.RELIC;
   const p = waveParams(wave);
   // Soft-lock guard: always keep scoring targets available
-  if (countScoring() < 2) {
+  if (countScoring() < 4) {
     const r = Math.random();
     if (r < 0.55) return KIND.RELIC;
     if (r < 0.8) return KIND.PLANET;
@@ -264,7 +264,7 @@ function pickKind(boss) {
 
 function ensureProgressTargets() {
   let guard = 0;
-  while (countScoring() < 2 && world.length < 10 && guard++ < 6) {
+  while (countScoring() < 4 && world.length < 14 && guard++ < 10) {
     const kind = Math.random() < 0.55 ? KIND.RELIC : (Math.random() < 0.5 ? KIND.PLANET : KIND.STAR);
     const o = makeObject(kind, false);
     o.theta = craftTheta + Math.PI * (0.55 + Math.random() * 0.9) * (Math.random() < 0.5 ? 1 : -1);
@@ -327,7 +327,7 @@ function spawnWaveField() {
   }
 
   for (let i = world.length; i < count; i++) {
-    const kind = (isBossWave && countScoring() >= 2 && Math.random() < 0.32) ? KIND.DEBRIS : pickKind(false);
+    const kind = (isBossWave && countScoring() >= 4 && Math.random() < 0.32) ? KIND.DEBRIS : pickKind(false);
     const o = makeObject(kind, false);
     let theta;
     let tries = 0;
@@ -348,7 +348,7 @@ function spawnWaveField() {
 
 function refillObject() {
   if (world.length >= waveParams(wave).maxObjects + (isBossWave ? 3 : 0)) return;
-  const kind = (countScoring() >= 2 && isBossWave && Math.random() < 0.28) ? KIND.DEBRIS : pickKind(false);
+  const kind = (countScoring() >= 4 && isBossWave && Math.random() < 0.28) ? KIND.DEBRIS : pickKind(false);
   const o = makeObject(kind, false);
   o.theta = craftTheta + Math.PI * (0.7 + Math.random() * 0.6) * (Math.random() < 0.5 ? 1 : -1);
   o.radius = INNER_MIN + Math.random() * (INNER_MAX - INNER_MIN);
@@ -473,8 +473,7 @@ function doSnap() {
   if (target.kind === KIND.DEBRIS) {
     if (audio.stingDebris) audio.stingDebris(); else audio.stingMiss();
     // distinct bad FX
-    if (audio.stingDebris) audio.stingDebris(); else audio.stingMiss();
-    flash('miss');
+        flash('miss');
     camShake = 0.55;
     if (vfx) {
       vfx.shatterAt(target.mesh.position.clone(), BAD, 16, 1.1);
@@ -770,11 +769,18 @@ async function boot() {
   scene.add(aimLine);
   window.__aimLine = aimLine;
 
-  sun = await ASSET('./assets/dying_sun.js', { height: 40 });
+  sun = await ASSET('./assets/dying_sun.js', { height: 36 });
+  // ASSET sits models on the ground — re-center so the star is AT the origin (no floating ball above)
+  {
+    const box = new THREE.Box3().setFromObject(sun);
+    const c = box.getCenter(new THREE.Vector3());
+    sun.position.sub(c);
+  }
   sun.userData.isSun = true;
   sunBaseScale = 1;
   scene.add(sun);
   sunGlow = createSunGlow(AMBER);
+  sunGlow.position.set(0, 0, 0);
   scene.add(sunGlow);
   vfx = createVfx(scene, { amber: AMBER, cold: COLD });
 
@@ -937,6 +943,7 @@ function bindInput(canvas) {
   });
   $('btnMute')?.addEventListener('click', (e) => {
     e.preventDefault();
+    audio.start(); // ensure ctx unlocked even if PLAY was skipped
     const m = audio.toggleMute();
     const b = $('btnMute');
     if (b) { b.classList.toggle('off', m); b.textContent = m ? ('🔇 ' + t('mute')) : '♪ SOUND'; }
