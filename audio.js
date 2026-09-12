@@ -24,7 +24,36 @@ export function createSpaceAudio() {
 
   // Audible on tiny speakers: A3 and up
   const SCALE = [0, 3, 5, 7, 10, 12, 15, 17]; // minor-ish / space
-  const ROOT = 220; // A3
+  const ROOT = 220; // A3 — transposed down as waves deepen (same intervals)
+  let bassOsc = null;
+
+  /** Same notes, lower register as the run gets intense. */
+  function transposeSemis() {
+    // Wave 1–9: 0 · approaching 10: ease to -5 · 10–19: -5 · →20: -10 · 20+: -12
+    const w = waveLayer;
+    if (w >= 20) return -12;
+    if (w >= 10) return -5 - Math.min(5, (w - 10) * 0.5); // -5 … -10 toward 20
+    if (w >= 7) return -((w - 6) * 1.25); // gentle preview -1.25…-3.75
+    return 0;
+  }
+
+  function rootHz() {
+    return ROOT * Math.pow(2, transposeSemis() / 12);
+  }
+
+  function applyPadTranspose() {
+    if (!ctx || !padOsc.length) return;
+    const t = ctx.currentTime;
+    const mul = Math.pow(2, transposeSemis() / 12);
+    // speed used to lift pitch — invert: faster → slightly deeper within the wave band
+    const speedDark = 1 - Math.min(0.08, Math.max(0, speedNorm - 0.5) * 0.06);
+    for (const p of padOsc) {
+      p.o.frequency.setTargetAtTime(p.base * mul * speedDark, t, 0.8);
+    }
+    if (bassOsc) {
+      bassOsc.frequency.setTargetAtTime((ROOT / 2) * mul * speedDark, t, 0.8);
+    }
+  }
 
   function ensure() {
     if (ctx) return;
@@ -89,6 +118,7 @@ export function createSpaceAudio() {
       o.connect(gg);
       gg.connect(bassGain);
       o.start();
+      bassOsc = o;
     }
 
     // Soft align breath (gentle low sine + heavy LP — not a rising alarm)
@@ -125,18 +155,19 @@ export function createSpaceAudio() {
   }
 
   function chord(when) {
-    // Clear midrange chord hit
+    const root = rootHz();
     const deg = [0, 3, 7, 12];
     for (let i = 0; i < deg.length; i++) {
-      const f = ROOT * Math.pow(2, deg[i] / 12);
+      const f = root * Math.pow(2, deg[i] / 12);
       beep(f, when + i * 0.01, 0.55, i < 2 ? 'sine' : 'triangle', 0.12 - i * 0.02, leadGain);
     }
   }
 
   function melodyNote(when, deg, gain) {
-    const f = ROOT * Math.pow(2, deg / 12);
+    const root = rootHz();
+    const f = root * Math.pow(2, deg / 12);
     beep(f, when, 0.28, 'sine', gain, leadGain);
-    // light octave sparkle
+    // sparkle stays one octave above current root (still "same notes")
     beep(f * 2, when + 0.02, 0.2, 'triangle', gain * 0.35, leadGain);
   }
 
@@ -158,8 +189,9 @@ export function createSpaceAudio() {
     }
 
     // Soft pulse on 2 and 4 (audible thump via mid sine, not sub)
-    beep(ROOT / 2, t0 + beat, 0.2, 'sine', 0.1, bassGain);
-    beep(ROOT / 2, t0 + beat * 3, 0.2, 'sine', 0.08, bassGain);
+    const pulse = rootHz() / 2;
+    beep(pulse, t0 + beat, 0.2, 'sine', 0.1, bassGain);
+    beep(pulse, t0 + beat * 3, 0.2, 'sine', 0.08, bassGain);
 
     step = (step + 1) % 32;
   }
@@ -214,18 +246,14 @@ export function createSpaceAudio() {
     const open = Math.min(1, (waveLayer - 1) / 6);
     leadGain.gain.setTargetAtTime(0.42 + open * 0.1, ctx.currentTime, 0.4);
     padGain.gain.setTargetAtTime(0.10 + open * 0.04, ctx.currentTime, 0.4);
+    applyPadTranspose();
   }
   function setWaveLayer(w) { setWave(w); }
 
   function setOrbitSpeed(norm) {
     speedNorm = Math.max(0.2, Math.min(2.2, norm));
-    // gently brighten pads with speed (still midrange)
-    if (!ctx || !padOsc.length) return;
-    const t = ctx.currentTime;
-    const lift = 1 + Math.min(0.35, (speedNorm - 0.3) * 0.2);
-    for (const p of padOsc) {
-      p.o.frequency.setTargetAtTime(p.base * lift, t, 0.5);
-    }
+    // Same melody, darker with speed/waves (no upward lift)
+    applyPadTranspose();
   }
   function setTension(v) {
     setOrbitSpeed(0.35 + Math.max(0, Math.min(1, v)) * 1.2);
@@ -327,5 +355,7 @@ export function createSpaceAudio() {
     stingExplosion,
     get muted() { return muted; },
     get ctxState() { return ctx ? ctx.state : 'none'; },
+    get transposeSemis() { return transposeSemis(); },
+    get rootHz() { return rootHz(); },
   };
 }

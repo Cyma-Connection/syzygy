@@ -890,6 +890,8 @@ async function boot() {
 
   window.__READY__ = true;
   window.__START__ = startRun;
+  botOn = /(?:\?|&)bot=1(?:&|$)/.test(location.search) || location.hash === '#bot';
+  if (botOn) console.info('[SYZYGY] bot playtest ON');
   publishGame();
 
   applyDom();
@@ -1041,6 +1043,20 @@ function renderBoard(rows) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+
+/** Machine playtest: ?bot=1 auto-SNAP on safe alignments (skips debris). */
+let botOn = false;
+function tickBot() {
+  if (!botOn || !started || over || endingCinematic) return;
+  computeAlignment();
+  if (!bestTarget || bestTarget.kind === KIND.DEBRIS) return;
+  if (align >= goodBand(wave) * 0.98) doSnap();
+  // Use LOCK when ready
+  if (autoAlignUnlocked && autoAlignReady && autoAlignCd <= 0 && !autoAlignActive && align >= 0.55) {
+    activateAutoAlign();
+  }
 }
 
 function publishGame() {
