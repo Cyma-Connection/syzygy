@@ -161,6 +161,51 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
     });
   }
 
+
+  // --- geometric shatter (boxes/cones, no textures) ---
+  const shards = [];
+  function shatterAt(origin, color = amber, count = 18, speed = 1) {
+    for (let i = 0; i < count; i++) {
+      const isCone = i % 3 === 0;
+      const mesh = new THREE.Mesh(
+        isCone
+          ? new THREE.ConeGeometry(0.35, 1.1, 5)
+          : new THREE.BoxGeometry(0.5 + Math.random() * 0.7, 0.25, 0.4 + Math.random() * 0.5),
+        new THREE.MeshBasicMaterial({
+          color: i % 2 ? color : cold,
+          transparent: true,
+          opacity: 0.95,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      mesh.position.copy(origin);
+      const vel = new THREE.Vector3(
+        Math.random() - 0.5,
+        Math.random() - 0.2,
+        Math.random() - 0.5
+      ).normalize().multiplyScalar((18 + Math.random() * 35) * speed);
+      const spin = new THREE.Vector3(
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8
+      );
+      root.add(mesh);
+      shards.push({ mesh, vel, spin, life: 0.55 + Math.random() * 0.35 });
+    }
+  }
+
+  function nearMissBurst(origin) {
+    for (let i = 0; i < 10; i++) {
+      sparkI = (sparkI + 1) % SPARK_N;
+      sparkPos[sparkI * 3] = origin.x + (Math.random() - 0.5) * 6;
+      sparkPos[sparkI * 3 + 1] = origin.y + (Math.random() - 0.5) * 6;
+      sparkPos[sparkI * 3 + 2] = origin.z + (Math.random() - 0.5) * 6;
+      sparkLife[sparkI] = 0.7;
+    }
+    sparkGeo.attributes.position.needsUpdate = true;
+  }
+
   let meteorCD = 2;
 
   return {
@@ -263,6 +308,23 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
         f.mesh.scale.setScalar(sunScale * (1.2 + 0.4 * Math.sin(f.a * 2)));
       }
 
+
+      // shards
+      for (let i = shards.length - 1; i >= 0; i--) {
+        const sh = shards[i];
+        sh.life -= dt;
+        sh.mesh.position.addScaledVector(sh.vel, dt);
+        sh.vel.y -= 12 * dt;
+        sh.mesh.rotation.x += sh.spin.x * dt;
+        sh.mesh.rotation.y += sh.spin.y * dt;
+        sh.mesh.material.opacity = Math.max(0, sh.life * 1.5);
+        if (sh.life <= 0) {
+          root.remove(sh.mesh);
+          sh.mesh.geometry.dispose();
+          shards.splice(i, 1);
+        }
+      }
+
       // warp
       if (warping) {
         const arr = warp.geometry.attributes.position.array;
@@ -344,5 +406,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
     pulseAt(origin, color = cold) {
       pulseRing(origin, color, 28);
     },
+    shatterAt,
+    nearMissBurst,
   };
 }

@@ -117,8 +117,14 @@ export function createSpaceAudio() {
     stingMiss() {
       if (!ctx || !started) return;
       const t = ctx.currentTime;
-      tone(110, t, 0.25, 'sawtooth', 0.1);
-      tone(90, t + 0.05, 0.3, 'sawtooth', 0.08);
+      tone(140, t, 0.12, 'square', 0.12);
+      tone(95, t + 0.08, 0.2, 'sawtooth', 0.1);
+    },
+    stingTimeout() {
+      if (!ctx || !started) return;
+      const t = ctx.currentTime;
+      tone(70, t, 0.35, 'sine', 0.14);
+      tone(55, t + 0.12, 0.4, 'triangle', 0.1);
     },
     stop() {
       timers.forEach(clearInterval);

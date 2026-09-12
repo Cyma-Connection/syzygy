@@ -41,6 +41,15 @@ let targetAlive = false;
 let targetLife = 0;
 let targetMaxLife = 4;
 let failing = false;
+let freezeFrames = 0;
+let camPunch = 0; // seconds remaining of punch-back
+let camShake = 0;
+let perfectStreak = 0;
+let heatOn = false;
+let isBoss = false;
+let bossPhase = 0; // 0..2 for boss
+let bossHits = 0;
+
 let align = 0; // 0..1
 let zoom = 1; // pinch
 let camDist = 120;
@@ -86,21 +95,37 @@ function goodBand(w){
 }
 
 function updateHud(){
+  const need = waveParams(wave).perWave;
+  const left = Math.max(0, need - snapsInWave);
   setText('scoreBox', String(score));
   setText('waveBox', `WAVE ${wave}`);
+  setText('waveNext', left ? `NEXT ${left}` : 'BOSS?' );
+  const wn = $('waveNext');
+  if (wn) wn.textContent = `→ ${left} SNAP${left===1?'':'S'}`;
   setText('lives', '● '.repeat(lives).trim() || '○');
   const fill = $('meterFill');
   if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
   const btn = $('snapBtn');
-  if (btn) btn.classList.toggle('hot', align >= goodBand(wave));
+  if (btn) {
+    const hot = align >= goodBand(wave);
+    const near = align >= 0.55 && !hot;
+    btn.classList.toggle('hot', hot);
+    btn.classList.toggle('near', near);
+    // pulse faster as we approach sweet spot
+    const t = Math.max(0, Math.min(1, (align - 0.4) / 0.6));
+    const sec = 0.85 - t * 0.55; // 0.85s → 0.3s
+    btn.style.setProperty('--snap-pulse', `${sec.toFixed(2)}s`);
+  }
+  const heatEl = $('heatBadge');
+  if (heatEl) heatEl.classList.toggle('on', heatOn);
 }
 
 function flash(kind){
   const fx = $('fx');
   if (!fx) return;
-  fx.classList.remove('flash','miss');
+  fx.classList.remove('flash','miss','flashPerfect');
   void fx.offsetWidth;
-  fx.classList.add(kind === 'miss' ? 'miss' : 'flash');
+  fx.classList.add(kind === 'miss' ? 'miss' : kind === 'flashPerfect' ? 'flashPerfect' : 'flash');
 }
 
 function showCombo(label){
@@ -182,18 +207,30 @@ async function boot(){
 
 function spawnTarget(){
   const p = waveParams(wave);
+  // Boss every 5 waves, as first snap of that wave
+  isBoss = (wave > 0 && wave % 5 === 0 && snapsInWave === 0);
+  bossHits = 0;
+  bossPhase = 0;
   targetObj = relicPool[Math.floor(Math.random()*relicPool.length)];
   targetObj.visible = true;
-  // spawn opposite-ish, sweep toward alignment
+  targetObj.scale.setScalar(isBoss ? 3 : 1);
   const side = Math.random() < 0.5 ? 1 : -1;
   targetTheta = aimTheta + side * (0.9 + Math.random()*0.7);
-  targetSpeed = p.speed * side * -1; // move toward aim
+  targetSpeed = (isBoss ? p.speed * 0.35 : p.speed) * side * -1;
   failing = false;
   targetAlive = true;
-  targetMaxLife = Math.max(1.6, 4.2 - wave * 0.18);
+  targetMaxLife = isBoss
+    ? Math.max(3.5, 6.5 - wave * 0.1)
+    : Math.max(1.6, 4.2 - wave * 0.18);
   targetLife = targetMaxLife;
   place(targetObj, targetTheta, 70 + Math.random()*25, (Math.random()-0.5)*8);
-  setHint(wave === 1 && snapsInWave === 0 ? 'Drag to aim · SNAP in the sweet spot' : 'ALIGN & SNAP');
+  if (isBoss) {
+    setHint('BOSS RELIC — 3 SNAPS');
+    showCombo('BOSS');
+    audio.setTension?.(1);
+  } else {
+    setHint(wave === 1 && snapsInWave === 0 ? 'Drag to aim · SNAP in the sweet spot' : 'ALIGN & SNAP');
+  }
 }
 
 function failLife(reason){
@@ -201,50 +238,136 @@ function failLife(reason){
   failing = true;
   lives -= 1;
   combo = 0;
-  audio.stingMiss();
+  perfectStreak = 0;
+  heatOn = false;
+  const isTimeout = reason === 'TOO LATE';
+  if (isTimeout && audio.stingTimeout) audio.stingTimeout();
+  else audio.stingMiss();
   flash('miss');
+  camShake = isTimeout ? 0.28 : 0.4;
   setHint(reason || 'MISS');
   updateHud();
-  if (targetObj) targetObj.visible = false;
+  if (targetObj) { targetObj.visible = false; targetObj.scale.set(1,1,1); }
   targetAlive = false;
+  isBoss = false;
   if (lives <= 0) endRun();
   else setTimeout(() => { failing = false; spawnTarget(); }, 500);
 }
 
 function doSnap(){
   if (!started || over || state !== STATE.PLAY || !targetAlive) return;
+  if (freezeFrames > 0) return;
   const perf = perfectBand(wave);
   const good = goodBand(wave);
   let grade = 'MISS';
   let pts = 0;
 
-  if (align >= perf) { grade = 'PERFECT'; pts = 1000; combo += 1; }
-  else if (align >= good) { grade = 'GOOD'; pts = 500; combo += 1; }
-  else if (align >= 0.55) { grade = 'OK'; pts = 200; combo = 0; }
+  // Boss: only the sweet-spot phase scores full; others partial
+  if (isBoss) {
+    bossHits += 1;
+    if (align >= good) {
+      grade = align >= perf ? 'PERFECT' : 'GOOD';
+      pts = align >= perf ? 1000 : 500;
+      if (align >= perf) { combo += 1; perfectStreak += 1; }
+      else { perfectStreak = 0; }
+    } else {
+      grade = 'PARTIAL';
+      pts = 100;
+      perfectStreak = 0;
+    }
+    const heatMult = heatOn ? 2 : 1;
+    const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave-1)*0.08) * heatMult);
+    score += gained;
+    bestCombo = Math.max(bestCombo, combo);
+    audio.stingLock();
+    if (vfx && targetObj) {
+      vfx.shatterAt(targetObj.position.clone(), grade === 'PERFECT' ? GOOD : AMBER, grade === 'PARTIAL' ? 8 : 14, isBoss ? 0.65 : 1);
+      vfx.lockBurst(targetObj.position.clone(), AMBER);
+    }
+    flash(grade === 'PERFECT' ? 'flashPerfect' : 'flash');
+    camPunch = 0.3;
+    showCombo(`${grade} +${gained}`);
+    setHint(`BOSS ${bossHits}/3`);
+    if (bossHits >= 3) {
+      snapsInWave += 1;
+      targetObj.visible = false;
+      targetObj.scale.set(1,1,1);
+      targetAlive = false;
+      isBoss = false;
+      maybeAdvanceWave();
+      setTimeout(spawnTarget, 550);
+    } else {
+      // next boss phase: nudge angle and refresh life
+      targetTheta += (Math.random() < 0.5 ? 1 : -1) * 0.55;
+      targetLife = targetMaxLife;
+      bossPhase = bossHits;
+    }
+    updateHud();
+    updateHeat();
+    return;
+  }
+
+  if (align >= perf) { grade = 'PERFECT'; pts = 1000; combo += 1; perfectStreak += 1; }
+  else if (align >= good) { grade = 'GOOD'; pts = 500; combo += 1; perfectStreak = 0; }
+  else if (align >= 0.55) { grade = 'OK'; pts = 200; combo = 0; perfectStreak = 0; }
   else {
     failLife('TOO EARLY / OFF');
     return;
   }
 
+  updateHeat();
+  const heatMult = heatOn ? 2 : 1;
   const mult = Math.max(1, combo);
-  const gained = Math.floor(pts * mult * (1 + (wave-1)*0.08));
+  const gained = Math.floor(pts * mult * (1 + (wave-1)*0.08) * heatMult);
   score += gained;
   bestCombo = Math.max(bestCombo, combo);
   snapsInWave += 1;
 
   audio.stingLock();
-  flash('flash');
-  showCombo(`${grade}${combo>1?` x${combo}`:''}`);
-  setHint(`+${gained}`);
-  if (vfx && targetObj) {
-    vfx.lockBurst(targetObj.position.clone().multiplyScalar(0.5), grade==='PERFECT'?GOOD:AMBER);
+  const pos = targetObj.position.clone();
+  if (grade === 'PERFECT') {
+    freezeFrames = 3;
+    flash('flashPerfect');
+    camPunch = 0.3;
+    if (vfx) vfx.shatterAt(pos, GOOD, 22, 1.15);
+  } else {
+    flash('flash');
+    camPunch = 0.18;
+    if (vfx) vfx.shatterAt(pos, AMBER, 12, 0.9);
+  }
+  if (vfx) {
+    vfx.lockBurst(pos, grade === 'PERFECT' ? GOOD : AMBER);
     vfx.pulseAt(new THREE.Vector3(), COLD);
   }
+  showCombo(`${grade}${combo>1?` x${combo}`:''}${heatOn?' HEAT':''}`);
+  setHint(`+${gained}`);
 
   targetObj.visible = false;
+  targetObj.scale.set(1,1,1);
   targetAlive = false;
   updateHud();
+  maybeAdvanceWave();
+  setTimeout(spawnTarget, grade === 'PERFECT' ? 480 : 400);
+}
 
+function updateHeat(){
+  if (perfectStreak >= 3) {
+    if (!heatOn) showCombo('HEAT x2');
+    heatOn = true;
+  } else {
+    heatOn = false;
+  }
+  if (craft) {
+    craft.traverse((n) => {
+      if (n.isMesh && n.material && n.material.emissive) {
+        n.material.emissive = new THREE.Color(heatOn ? AMBER : 0x000000);
+        n.material.emissiveIntensity = heatOn ? 0.55 : 0;
+      }
+    });
+  }
+}
+
+function maybeAdvanceWave(){
   const need = waveParams(wave).perWave;
   if (snapsInWave >= need) {
     wave += 1;
@@ -252,12 +375,11 @@ function doSnap(){
     setHint(`WAVE ${wave}`);
     showCombo(`WAVE ${wave}`);
   }
-  setTimeout(spawnTarget, 420);
 }
 
 function startRun(){
-  if (started && !over) return;
-  score = 0; wave = 1; lives = 3; combo = 0; bestCombo = 0; snapsInWave = 0;
+  if (started && !over && state === STATE.PLAY) return;
+  score = 0; wave = 1; lives = 3; combo = 0; bestCombo = 0; snapsInWave = 0; perfectStreak = 0; heatOn = false;
   playElapsed = 0; over = false; started = true; state = STATE.PLAY;
   zoom = 1; camDist = 120;
   $('start')?.classList.remove('on');
@@ -406,28 +528,43 @@ function publishGame(){
 function frame(now){
   const raw = (now-lastT)/1000;
   fps = 1/(raw||0.016);
-  const dt = Math.min(0.05, Math.max(0.001, raw));
+  let dt = Math.min(0.05, Math.max(0.001, raw));
   lastT = now;
   clockT += dt;
+
+  // Perfect SNAP freeze: hold 3 frames
+  if (freezeFrames > 0) {
+    freezeFrames -= 1;
+    renderer.render(scene, camera);
+    publishGame();
+    requestAnimationFrame(frame);
+    return;
+  }
+
   if (spacefx) spacefx.update(dt, clockT);
 
   if (started && !over) {
     playElapsed += dt;
     audio.setTension(Math.min(1, wave/12));
+    audio.setWaveLayer?.(wave);
 
-    // move target toward aim; expire if too late
     if (targetAlive && targetObj) {
       targetTheta += targetSpeed * dt;
-      place(targetObj, targetTheta, 78, targetObj.position.y);
+      const r = isBoss ? 88 : 78;
+      place(targetObj, targetTheta, r, targetObj.position.y);
+      if (isBoss) targetObj.scale.setScalar(3);
       targetLife -= dt;
       if (targetLife <= 0) failLife('TOO LATE');
     }
 
-    // alignment quality: 1 when aimTheta ~= targetTheta
     if (targetAlive) {
       let d = Math.abs(Math.atan2(Math.sin(targetTheta-aimTheta), Math.cos(targetTheta-aimTheta)));
       const soft = waveParams(wave).window + 0.25;
       align = Math.max(0, 1 - d / soft);
+      // near-miss sparks band
+      if (align >= 0.45 && align < 0.55 && vfx && targetObj && Math.random() < dt * 14) {
+        vfx.nearMissBurst(targetObj.position);
+      }
     } else {
       align = 0;
     }
@@ -436,7 +573,6 @@ function frame(now){
 
   place(craft, aimTheta, 95);
 
-  // aim line
   const aimLine = window.__aimLine;
   if (aimLine) {
     const end = new THREE.Vector3(Math.cos(aimTheta)*160, 0, Math.sin(aimTheta)*160);
@@ -445,14 +581,26 @@ function frame(now){
 
   if (vfx) vfx.update(dt, { craftPos: craft?.position, speed: Math.abs(targetSpeed)*50, alignT: align, sunScale:1 });
 
-  // camera
   if (camera) {
     const target = new THREE.Vector3(Math.cos(aimTheta)*40, 18, Math.sin(aimTheta)*40);
+    let dist = camDist;
+    // punch: breathe out then back in 0.3s
+    if (camPunch > 0) {
+      camPunch = Math.max(0, camPunch - dt);
+      const u = 1 - camPunch / 0.3;
+      const punch = Math.sin(u * Math.PI) * 14;
+      dist += punch;
+    }
     const camGoal = new THREE.Vector3(
-      Math.cos(aimTheta+0.9)*camDist,
+      Math.cos(aimTheta+0.9)*dist,
       28 + (1.2-zoom)*10,
-      Math.sin(aimTheta+0.9)*camDist
+      Math.sin(aimTheta+0.9)*dist
     );
+    if (camShake > 0) {
+      camShake = Math.max(0, camShake - dt);
+      camGoal.x += (Math.random()-0.5) * 3.5 * camShake;
+      camGoal.y += (Math.random()-0.5) * 3.5 * camShake;
+    }
     camera.position.lerp(camGoal, 1-Math.exp(-3*dt));
     camera.lookAt(target.x*0.2, 4, target.z*0.2);
     camera.fov = THREE.MathUtils.lerp(camera.fov, 48 + zoom*10, 0.1);

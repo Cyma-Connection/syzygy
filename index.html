@@ -23,7 +23,9 @@
       background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.6) 100%); }
     #fx.flash { animation: flash .35s ease-out; }
     #fx.miss { animation: miss .35s ease-out; }
-    @keyframes flash { 0%{box-shadow:inset 0 0 100px rgba(90,214,122,.5)} 100%{box-shadow:inset 0 0 0 transparent} }
+    @keyframes flash { 0%{box-shadow:inset 0 0 140px rgba(255,255,255,.85)} 35%{box-shadow:inset 0 0 80px rgba(232,160,74,.45)} 100%{box-shadow:inset 0 0 0 transparent} }
+    #fx.flashPerfect { animation: flashPerfect .4s ease-out; }
+    @keyframes flashPerfect { 0%{background:rgba(255,255,255,.55); box-shadow:inset 0 0 160px #fff} 100%{background:transparent; box-shadow:inset 0 0 0 transparent} }
     @keyframes miss { 0%{box-shadow:inset 0 0 100px rgba(255,77,106,.45)} 100%{box-shadow:inset 0 0 0 transparent} }
 
     #load { position:fixed; inset:0; z-index:50; background:var(--void); display:flex; flex-direction:column;
@@ -50,7 +52,13 @@
       display:flex; justify-content:space-between; padding:0 14px; font-size:12px; letter-spacing:.14em;
       text-shadow:0 2px 8px #000; }
     #scoreBox { color:var(--amber); }
-    #waveBox { color:var(--cold); }
+    #waveCol { text-align:center; }
+    #waveBox { color:var(--cold); display:block; }
+    #waveNext { display:block; font-size:9px; letter-spacing:.16em; color:#7a8494; margin-top:3px; }
+    #heatBadge { position:absolute; left:50%; top:max(70px, calc(env(safe-area-inset-top) + 58px));
+      transform:translateX(-50%); font-size:11px; letter-spacing:.24em; color:var(--amber);
+      opacity:0; pointer-events:none; text-shadow:0 0 16px rgba(232,160,74,.7); }
+    #heatBadge.on { opacity:1; }
     #lives { color:#fff; }
     #hint { position:absolute; left:0; right:0; top:max(42px, calc(env(safe-area-inset-top) + 32px));
       text-align:center; font-size:12px; letter-spacing:.12em; color:#cfd6e6; text-shadow:0 2px 10px #000; }
@@ -69,7 +77,9 @@
       color:var(--amber); font:inherit; font-size:14px; letter-spacing:.28em; text-indent:.28em; cursor:pointer;
       box-shadow:0 0 30px rgba(232,160,74,.2); }
     #snapBtn.hot { border-color:var(--good); color:var(--good); box-shadow:0 0 40px rgba(90,214,122,.45);
-      animation: pulse .55s ease-in-out infinite; }
+      animation: pulse var(--snap-pulse, 0.55s) ease-in-out infinite; }
+    #snapBtn.near { border-color:var(--amber); box-shadow:0 0 28px rgba(232,160,74,.35);
+      animation: pulse var(--snap-pulse, 0.7s) ease-in-out infinite; }
     @keyframes pulse { 0%,100%{ transform:translateX(-50%) scale(1)} 50%{ transform:translateX(-50%) scale(1.06)} }
     #coach { position:absolute; right:max(8px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%);
       width:min(190px,40vw); padding:12px; border-radius:10px; background:rgba(8,10,18,.75);
@@ -117,9 +127,10 @@
   <div id="hud">
     <div id="top">
       <span id="scoreBox">0</span>
-      <span id="waveBox">WAVE 1</span>
+      <div id="waveCol"><span id="waveBox">WAVE 1</span><span id="waveNext">→ 5 SNAPS</span></div>
       <span id="lives">● ● ●</span>
     </div>
+    <div id="heatBadge">HEAT x2</div>
     <div id="hint">Aim · then SNAP</div>
     <div id="combo">PERFECT x2</div>
     <aside id="coach">1. Drag to align<br/>2. Wait for the green pulse<br/>3. Hit SNAP<br/>4. Pinch = zoom</aside>
