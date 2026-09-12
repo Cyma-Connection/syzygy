@@ -24,11 +24,10 @@ export async function fetchGlobal() {
   const res = await fetch(`${SCORES_BASE}.json`, { cache: 'no-store' });
   if (!res.ok) throw new Error('global fetch failed');
   const data = await res.json();
-  // API shape may be { scores: [...] } or array
-  const rows = Array.isArray(data) ? data : data.scores || data.entries || [];
+  const rows = Array.isArray(data) ? data : data.scores || [];
   return rows
     .map((r) => ({
-      name: r.name || r.player || '???',
+      name: r.name || '???',
       score: Number(r.score) || 0,
       rank: r.rank,
     }))
@@ -37,23 +36,22 @@ export async function fetchGlobal() {
 }
 
 export async function submitGlobal(name, score, playSeconds) {
-  // token flow
   const tRes = await fetch(`${SCORES_BASE}/token`, { method: 'POST' });
   if (!tRes.ok) throw new Error('token failed');
   const tokenBody = await tRes.json();
-  const token = tokenBody.token || tokenBody.id || tokenBody;
-  const body = {
-    token: typeof token === 'string' ? token : token.token,
-    name: String(name || 'ANON').slice(0, 15),
-    score: Math.floor(score),
-  };
-  // Wait min play time if needed
-  const wait = Math.max(0, 3200 - playSeconds * 1000);
+  const token = tokenBody.token;
+  const wait = Math.max(0, 3200 - (playSeconds || 0) * 1000);
   if (wait) await new Promise((r) => setTimeout(r, wait));
+  // API expects form-urlencoded, not JSON
+  const body = new URLSearchParams({
+    token: String(token),
+    name: String(name || 'ANON').slice(0, 15),
+    score: String(Math.floor(score)),
+  });
   const sRes = await fetch(SCORES_BASE, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
   });
   if (!sRes.ok) {
     const err = await sRes.text();
