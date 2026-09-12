@@ -1,21 +1,28 @@
-/** SYZYGY ORBIT SNAP — darker brass-obsidian bed (~118 BPM) + quiet SFX. Procedural only. */
+/**
+ * SYZYGY ORBIT SNAP — procedural deep-space score.
+ * Wide pads, slow progressions, crystalline echoes — infinity mood, not 2-note stress.
+ * Jam: Web Audio only, no samples. Mute kills master.
+ */
 export function createSpaceAudio() {
   let ctx, master, musicBus, sfxBus, filter, started = false, muted = false;
-  let timers = [];
-  let step = 0;
-  let waveLayer = 1;
-  let bassGain, hatGain, arpGain, leadGain, padGain, speedGain, alignGain;
-  let speedOscA, speedOscB, speedLfo;
+  let bassGain, padGain, arpGain, airGain, speedGain, alignGain;
+  let padFilter, speedOscA, speedOscB, speedFilter;
   let alignOsc, alignFilter;
-  let padFilter, padLfo;
-  let orbitSpeedNorm = 0.5;
-  let alignLevel = 0;
-  let melodyTimer = null;
-  let melodyStep = 0;
-  let melodyIntervalMs = 320;
+  let orbitSpeedNorm = 0.35;
+  let waveLayer = 1;
   let loopTimer = null;
-  let bpm = 118;
-  const baseBpm = 118;
+  let phraseTimer = null;
+  let phraseStep = 0;
+  let bpm = 72; // slow cosmic pulse; accelerates gently with orbit
+  const baseBpm = 72;
+
+  // Dorian / space-ish degrees from root
+  const PROGRESSIONS = [
+    [0, 5, 7, 10, 12, 17, 19, 15],      // open void
+    [0, 3, 7, 10, 14, 12, 19, 22],      // minor drift
+    [0, 7, 12, 15, 19, 24, 17, 12],     // crystalline climb
+    [0, 5, 10, 14, 17, 21, 19, 12],     // infinite drift
+  ];
 
   function ensure() {
     if (ctx) return;
@@ -24,406 +31,330 @@ export function createSpaceAudio() {
     master = ctx.createGain();
     master.gain.value = 0;
     musicBus = ctx.createGain();
-    musicBus.gain.value = 0.92; // music bed prominent
+    musicBus.gain.value = 1.0;
     sfxBus = ctx.createGain();
-    sfxBus.gain.value = 0.28; // SFX tucked under music
+    sfxBus.gain.value = 0.22;
     filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 2200;
-    filter.Q.value = 0.55;
+    filter.frequency.value = 2800;
+    filter.Q.value = 0.4;
     filter.connect(musicBus);
     musicBus.connect(master);
     sfxBus.connect(master);
     master.connect(ctx.destination);
 
-    bassGain = ctx.createGain(); bassGain.gain.value = 0.32; bassGain.connect(filter);
-    hatGain = ctx.createGain(); hatGain.gain.value = 0; hatGain.connect(musicBus);
-    arpGain = ctx.createGain(); arpGain.gain.value = 0; arpGain.connect(filter);
-    leadGain = ctx.createGain(); leadGain.gain.value = 0; leadGain.connect(filter);
-    padGain = ctx.createGain(); padGain.gain.value = 0.22; padGain.connect(filter);
-    speedGain = ctx.createGain(); speedGain.gain.value = 0.06; speedGain.connect(filter);
+    bassGain = ctx.createGain(); bassGain.gain.value = 0.38; bassGain.connect(filter);
+    padGain = ctx.createGain(); padGain.gain.value = 0.28; padGain.connect(filter);
+    arpGain = ctx.createGain(); arpGain.gain.value = 0.12; arpGain.connect(filter);
+    airGain = ctx.createGain(); airGain.gain.value = 0.08; airGain.connect(musicBus);
+    speedGain = ctx.createGain(); speedGain.gain.value = 0.035; speedGain.connect(filter);
     alignGain = ctx.createGain(); alignGain.gain.value = 0.0001; alignGain.connect(sfxBus);
 
-    // Deep sub + fifth — obsidian floor
-    for (const [f, g] of [[36.7, 0.07], [55, 0.055], [73.4, 0.035]]) {
+    // Sub drone floor (C1-ish family) — infinity under everything
+    for (const [f, g, type] of [[32.7, 0.09, 'sine'], [49, 0.05, 'sine'], [65.4, 0.035, 'triangle']]) {
       const o = ctx.createOscillator();
-      o.type = f < 40 ? 'sine' : 'sawtooth';
+      o.type = type;
       o.frequency.value = f;
       const gg = ctx.createGain();
       gg.gain.value = g;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 180;
-      o.connect(lp);
-      lp.connect(gg);
-      gg.connect(bassGain);
+      lp.frequency.value = 140;
+      o.connect(lp); lp.connect(gg); gg.connect(bassGain);
       o.start();
     }
 
-    // Slow evolving brass-obsidian pads (detuned saws through warm LP)
+    // Wide evolving pads — 5ths + 9ths, long breath
     padFilter = ctx.createBiquadFilter();
     padFilter.type = 'lowpass';
-    padFilter.frequency.value = 680;
-    padFilter.Q.value = 0.9;
+    padFilter.frequency.value = 900;
+    padFilter.Q.value = 0.7;
     padFilter.connect(padGain);
-    for (const [f, det, g] of [[82.4, -3, 0.045], [123.5, 4, 0.038], [164.8, -2, 0.03], [196, 5, 0.022]]) {
+    const padVoices = [
+      [65.4, -4, 0.04, 'sawtooth'],
+      [98, 5, 0.032, 'sawtooth'],
+      [130.8, -6, 0.028, 'triangle'],
+      [196, 4, 0.02, 'triangle'],
+      [261.6, -3, 0.012, 'sine'],
+      [392, 6, 0.008, 'sine'],
+    ];
+    for (const [f, det, g, type] of padVoices) {
       const o = ctx.createOscillator();
-      o.type = 'sawtooth';
+      o.type = type;
       o.frequency.value = f + det;
       const gg = ctx.createGain();
       gg.gain.value = g;
-      o.connect(gg);
-      gg.connect(padFilter);
+      o.connect(gg); gg.connect(padFilter);
       o.start();
     }
-    // soft triangle shimmer layer
-    for (const [f, det] of [[246.9, -6], [329.6, 5]]) {
-      const o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.value = f + det;
-      const gg = ctx.createGain();
-      gg.gain.value = 0.018;
-      o.connect(gg);
-      gg.connect(padFilter);
-      o.start();
-    }
-    // slow LFO on pad brightness
+    // slow pad brightness LFO
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 0.07;
+    lfo.frequency.value = 0.045;
     const lfoG = ctx.createGain();
-    lfoG.gain.value = 220;
+    lfoG.gain.value = 380;
     lfo.connect(lfoG);
     lfoG.connect(padFilter.frequency);
     lfo.start();
-    padLfo = lfo;
 
-    // continuous speed bed — rises with orbital speed (dark bandpass)
+    // Soft space air (filtered noise bed)
+    {
+      const len = ctx.sampleRate * 2;
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.4;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1400;
+      bp.Q.value = 0.6;
+      const g = ctx.createGain();
+      g.gain.value = 0.55;
+      src.connect(bp); bp.connect(g); g.connect(airGain);
+      src.start();
+    }
+
+    // Gentle speed shimmer (not alarm)
     speedOscA = ctx.createOscillator();
-    speedOscA.type = 'sawtooth';
-    speedOscA.frequency.value = 48;
+    speedOscA.type = 'sine';
+    speedOscA.frequency.value = 110;
     speedOscB = ctx.createOscillator();
     speedOscB.type = 'triangle';
-    speedOscB.frequency.value = 72;
-    const spMix = ctx.createGain();
-    spMix.gain.value = 0.45;
-    const spFilter = ctx.createBiquadFilter();
-    spFilter.type = 'bandpass';
-    spFilter.frequency.value = 320;
-    spFilter.Q.value = 1.8;
-    speedOscA.connect(spMix);
-    speedOscB.connect(spMix);
-    spMix.connect(spFilter);
-    spFilter.connect(speedGain);
-    speedOscA.start();
-    speedOscB.start();
-    speedLfo = { filter: spFilter, a: speedOscA, b: speedOscB };
+    speedOscB.frequency.value = 165;
+    speedFilter = ctx.createBiquadFilter();
+    speedFilter.type = 'lowpass';
+    speedFilter.frequency.value = 600;
+    const sm = ctx.createGain();
+    sm.gain.value = 0.5;
+    speedOscA.connect(sm); speedOscB.connect(sm);
+    sm.connect(speedFilter); speedFilter.connect(speedGain);
+    speedOscA.start(); speedOscB.start();
 
-    // rising align tone (felt before SNAP) — quieter, under music
+    // Align cue (soft)
     alignOsc = ctx.createOscillator();
     alignOsc.type = 'sine';
-    alignOsc.frequency.value = 280;
+    alignOsc.frequency.value = 420;
     alignFilter = ctx.createBiquadFilter();
     alignFilter.type = 'lowpass';
-    alignFilter.frequency.value = 700;
-    alignOsc.connect(alignFilter);
-    alignFilter.connect(alignGain);
+    alignFilter.frequency.value = 900;
+    alignOsc.connect(alignFilter); alignFilter.connect(alignGain);
     alignOsc.start();
   }
 
-  function tone(dest, freq, t, dur, type, gain = 0.1) {
+  function tone(dest, freq, t, dur, type, gain = 0.08) {
     const o = ctx.createOscillator();
     o.type = type;
     o.frequency.setValueAtTime(freq, t);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.08, dur * 0.2));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g);
-    g.connect(dest);
-    o.start(t);
-    o.stop(t + dur + 0.03);
+    o.connect(g); g.connect(dest);
+    o.start(t); o.stop(t + dur + 0.05);
   }
 
-  function kick(t) {
+  /** Soft cosmic pulse (not a club kick) */
+  function pulse(t) {
     const o = ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(95, t);
-    o.frequency.exponentialRampToValueAtTime(32, t + 0.22);
+    o.frequency.setValueAtTime(55, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 0.4);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.14, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
-    o.connect(g);
-    g.connect(musicBus);
-    o.start(t);
-    o.stop(t + 0.32);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    o.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t + 0.6);
   }
 
-  function hat(t, g = 0.02) {
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.022, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const gain = ctx.createGain();
-    gain.gain.value = g;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 8200;
-    src.connect(hp);
-    hp.connect(gain);
-    gain.connect(hatGain);
-    src.start(t);
+  function echoNote(freq, t, gain = 0.045) {
+    // primary + two delayed ghosts = depth / infinity
+    tone(arpGain, freq, t, 0.55, 'sine', gain);
+    tone(arpGain, freq * 0.997, t + 0.22, 0.7, 'triangle', gain * 0.45);
+    tone(arpGain, freq * 1.5, t + 0.48, 0.9, 'sine', gain * 0.22);
   }
 
-  // sparse crystalline motifs — minor / space intervals (not chippy)
-  const melodyMotifs = [
-    [0, 7, 3, 10, 12, 7, 15, 10],
-    [0, 5, 12, 7, 17, 12, 10, 5],
-    [0, 8, 3, 15, 12, 8, 19, 15],
-    [0, 7, 12, 19, 15, 12, 10, 7],
-  ];
+  function schedulePhrase() {
+    if (!ctx || muted || !started) return;
+    const t0 = ctx.currentTime + 0.02;
+    const beat = 60 / bpm;
+    const prog = PROGRESSIONS[Math.min(3, Math.floor((orbitSpeedNorm - 0.2) * 2.2))];
+    const root = 110 * Math.pow(2, Math.min(0.55, (orbitSpeedNorm - 0.25) * 0.25)); // A2-ish, rises gently
 
-  function melodyTick() {
-    if (!ctx || muted || !started) {
-      melodyStep++;
-      return;
+    // soft pulse on 1 and 3
+    pulse(t0);
+    pulse(t0 + beat * 2);
+
+    // chord pad swell every phrase (held fifths)
+    const chordDegs = [prog[0], prog[2], prog[4]];
+    for (const deg of chordDegs) {
+      const f = root * Math.pow(2, deg / 12);
+      tone(padGain, f, t0, beat * 3.6, 'triangle', 0.035);
     }
-    const t = ctx.currentTime;
-    const motif = melodyMotifs[Math.min(3, Math.floor(orbitSpeedNorm))];
-    const deg = motif[melodyStep % motif.length];
-    // crystalline root ~155–280 Hz — spatial, not toy-bright
-    const root = 155 * Math.pow(2, Math.min(0.85, (orbitSpeedNorm - 0.2) * 0.4));
-    const f = root * Math.pow(2, deg / 12);
-    const dens = Math.min(1, (orbitSpeedNorm - 0.25) / 1.6);
-    const g = 0.07 + dens * 0.08; // louder arp so bed is audible
-    const dur = Math.max(0.14, melodyIntervalMs / 1000 * 0.95);
-    // primary: soft sine / triangle — crystalline
-    tone(arpGain, f, t, dur, dens > 0.7 ? 'triangle' : 'sine', g);
-    // quiet octave frost
-    if (melodyStep % 2 === 0) {
-      tone(leadGain, f * 2, t + 0.02, dur * 0.7, 'sine', 0.028 + dens * 0.025);
+
+    // melodic constellation — 6–10 notes across the phrase, not a 2-note hammer
+    const density = 6 + Math.floor(Math.min(4, orbitSpeedNorm * 2.5));
+    for (let i = 0; i < density; i++) {
+      const deg = prog[(phraseStep + i * 3) % prog.length];
+      const f = root * Math.pow(2, deg / 12);
+      const when = t0 + (i / density) * beat * 3.8 + (i % 2) * 0.04;
+      const g = 0.028 + (i % 3) * 0.008;
+      echoNote(f, when, g);
+      // occasional high sparkle
+      if (i % 4 === 2 && waveLayer >= 2) {
+        echoNote(f * 2, when + 0.12, g * 0.35);
+      }
     }
-    // sparse fifth harmony when fast
-    if (dens > 0.55 && melodyStep % 4 === 1) {
-      tone(arpGain, f * 1.5, t + 0.03, dur * 0.55, 'triangle', 0.03);
-    }
-    melodyStep++;
+    phraseStep = (phraseStep + 1) % 64;
   }
 
-  function rescheduleMelody() {
-    if (melodyTimer) {
-      clearInterval(melodyTimer);
-      melodyTimer = null;
-    }
-    if (!started) return;
-    const n = Math.max(0.2, Math.min(2.5, orbitSpeedNorm));
-    // slower crystalline pace; subtly accelerates with orbit
-    melodyIntervalMs = Math.max(110, 380 - n * 100);
-    melodyTimer = setInterval(melodyTick, melodyIntervalMs);
-  }
-
-  function rescheduleLoop() {
-    if (loopTimer) {
-      clearInterval(loopTimer);
-      timers = timers.filter((id) => id !== loopTimer);
-      loopTimer = null;
-    }
-    if (!started) return;
-    // ~118 BPM, subtle accel with orbit speed
-    bpm = baseBpm * (1 + Math.min(0.22, (orbitSpeedNorm - 0.4) * 0.12));
-    const beatMs = (60 / bpm / 2) * 1000;
+  function startLoop() {
+    stopLoop();
     const tick = () => {
-      if (!ctx || muted) {
-        step++;
-        return;
-      }
-      const t = ctx.currentTime;
-      const n = step % 16;
-      // soft pulse — not chippery kick/clap bed
-      if (n % 8 === 0) kick(t);
-      // slow evolving bass accents (sparse)
-      const bassMotif = [55, 0, 0, 0, 41.2, 0, 0, 55, 0, 0, 73.4, 0, 0, 0, 49, 0];
-      const bf = bassMotif[n];
-      if (bf) tone(bassGain, bf, t, 0.42, 'sine', 0.1);
-
-      if (waveLayer >= 2 && n % 4 === 2) {
-        hat(t, 0.018);
-      }
-      // rare brass swell accents — not Amiga leads
-      if (waveLayer >= 3 && (n === 0 || n === 8)) {
-        tone(leadGain, 110, t, 0.55, 'sawtooth', 0.035);
-      }
-      if (waveLayer >= 4 && n === 4) {
-        tone(padGain, 82.4, t, 0.7, 'triangle', 0.05);
-      }
-      // ghost sub pulse
-      if (n % 8 === 6) tone(padGain, 55, t, 0.35, 'sine', 0.045);
-      step++;
+      schedulePhrase();
+      const ms = (60 / bpm) * 4 * 1000; // 4-beat phrase
+      phraseTimer = setTimeout(tick, ms);
     };
     tick();
-    loopTimer = setInterval(tick, beatMs);
-    timers.push(loopTimer);
   }
 
-  function applyMute() {
-    if (!master || !ctx) return;
-    master.gain.linearRampToValueAtTime(muted ? 0.0001 : 0.55, ctx.currentTime + 0.08);
+  function stopLoop() {
+    if (phraseTimer) { clearTimeout(phraseTimer); phraseTimer = null; }
+    if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
   }
+
+  async function start() {
+    ensure();
+    if (ctx.state === 'suspended') await ctx.resume();
+    if (started) return;
+    started = true;
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0.0001, t);
+    master.gain.exponentialRampToValueAtTime(muted ? 0.0001 : 0.62, t + 1.2);
+    startLoop();
+  }
+
+  function setWave(w) {
+    waveLayer = Math.max(1, w | 0);
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    // open the sky a bit as waves rise — still ambient
+    const open = Math.min(1, (waveLayer - 1) / 8);
+    arpGain.gain.setTargetAtTime(0.10 + open * 0.08, t, 0.5);
+    airGain.gain.setTargetAtTime(0.07 + open * 0.05, t, 0.5);
+    filter.frequency.setTargetAtTime(2400 + open * 1200, t, 0.8);
+  }
+
+  function setOrbitSpeed(norm) {
+    orbitSpeedNorm = Math.max(0.15, Math.min(2.2, norm));
+    bpm = baseBpm + Math.min(36, (orbitSpeedNorm - 0.3) * 28); // 72 → ~108, never frantic
+    if (!ctx || !speedOscA) return;
+    const t = ctx.currentTime;
+    const f = 90 + orbitSpeedNorm * 55;
+    speedOscA.frequency.setTargetAtTime(f, t, 0.4);
+    speedOscB.frequency.setTargetAtTime(f * 1.5, t, 0.4);
+    speedFilter.frequency.setTargetAtTime(400 + orbitSpeedNorm * 500, t, 0.5);
+    speedGain.gain.setTargetAtTime(0.02 + Math.min(0.06, orbitSpeedNorm * 0.03), t, 0.4);
+  }
+
+  function setAlign(level) {
+    if (!ctx || !alignOsc) return;
+    const a = Math.max(0, Math.min(1, level));
+    const t = ctx.currentTime;
+    alignGain.gain.setTargetAtTime(0.0001 + a * a * 0.045, t, 0.08);
+    alignOsc.frequency.setTargetAtTime(380 + a * 220, t, 0.1);
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    if (!master) return muted;
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setTargetAtTime(muted ? 0.0001 : 0.62, t, 0.05);
+    return muted;
+  }
+
+  function stingPerfect() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    echoNote(523.25, t, 0.06);
+    echoNote(659.25, t + 0.08, 0.04);
+    echoNote(783.99, t + 0.16, 0.03);
+  }
+  function stingGood() {
+    if (!ctx || muted) return;
+    echoNote(392, ctx.currentTime, 0.05);
+    echoNote(494, ctx.currentTime + 0.1, 0.035);
+  }
+  function stingOk() {
+    if (!ctx || muted) return;
+    echoNote(329.6, ctx.currentTime, 0.04);
+  }
+  function stingMiss() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    tone(sfxBus, 140, t, 0.35, 'sawtooth', 0.06);
+    tone(sfxBus, 90, t + 0.05, 0.4, 'sine', 0.05);
+  }
+  function stingDebris() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    tone(sfxBus, 180, t, 0.25, 'square', 0.05);
+    tone(sfxBus, 70, t + 0.04, 0.45, 'sawtooth', 0.07);
+  }
+  function stingWave() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    echoNote(220, t, 0.05);
+    echoNote(330, t + 0.15, 0.04);
+    echoNote(440, t + 0.3, 0.035);
+    echoNote(660, t + 0.5, 0.025);
+  }
+  function stingLock() {
+    if (!ctx || muted) return;
+    echoNote(440, ctx.currentTime, 0.05);
+    echoNote(554, ctx.currentTime + 0.12, 0.04);
+  }
+  function stingBoom() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    tone(sfxBus, 60, t, 0.9, 'sine', 0.14);
+    tone(sfxBus, 40, t + 0.05, 1.1, 'triangle', 0.1);
+    tone(sfxBus, 120, t + 0.1, 0.5, 'sawtooth', 0.06);
+  }
+
+  // aliases used by main
+  function setTension(v) {
+    // map tension 0..1 into orbit/wave openness
+    setOrbitSpeed(0.3 + Math.max(0, Math.min(1, v)) * 1.4);
+  }
+  function setWaveLayer(w) { setWave(w); }
+  function setAlignTone(level) { setAlign(level); }
+  function stingAutoAlign() { stingLock(); }
+  function stingExplosion() { stingBoom(); }
 
   return {
-    async start() {
-      ensure();
-      if (ctx.state === 'suspended') await ctx.resume();
-      if (!started) {
-        started = true;
-        rescheduleLoop();
-        rescheduleMelody();
-      }
-      muted = false;
-      const t = ctx.currentTime;
-      master.gain.cancelScheduledValues(t);
-      master.gain.linearRampToValueAtTime(0.55, t + 1.0);
-      arpGain.gain.linearRampToValueAtTime(1, t + 0.25);
-      leadGain.gain.linearRampToValueAtTime(0.9, t + 0.25);
-      padGain.gain.linearRampToValueAtTime(0.22, t + 0.4);
-      bassGain.gain.linearRampToValueAtTime(0.32, t + 0.4);
-      this.setWaveLayer(1);
-      rescheduleMelody();
-      rescheduleLoop();
-    },
-    setMuted(m) {
-      muted = !!m;
-      applyMute();
-      return muted;
-    },
-    toggleMute() {
-      return this.setMuted(!muted);
-    },
-    isMuted() {
-      return muted;
-    },
-    setTension(x) {
-      if (!filter || !ctx) return;
-      filter.frequency.linearRampToValueAtTime(1400 + x * 1600, ctx.currentTime + 0.2);
-      if (padFilter) {
-        padFilter.frequency.linearRampToValueAtTime(520 + x * 480, ctx.currentTime + 0.35);
-      }
-    },
-    setWaveLayer(w) {
-      waveLayer = Math.max(1, Math.min(4, 1 + Math.floor((w - 1) / 2)));
-      if (!ctx) return;
-      const t = ctx.currentTime;
-      hatGain.gain.linearRampToValueAtTime(waveLayer >= 2 ? 0.55 : 0, t + 0.3);
-      arpGain.gain.linearRampToValueAtTime(1, t + 0.3);
-      leadGain.gain.linearRampToValueAtTime(0.9 + (waveLayer >= 4 ? 0.1 : 0), t + 0.3);
-    },
-    /** Map orbital rad/s into speed-bed pitch/intensity + subtle BPM accel */
-    setOrbitSpeed(radPerSec) {
-      if (!ctx || !speedLfo) return;
-      const prev = orbitSpeedNorm;
-      orbitSpeedNorm = Math.max(0.2, Math.min(2.5, radPerSec));
-      const t = ctx.currentTime;
-      const base = 42 + orbitSpeedNorm * 48;
-      speedLfo.a.frequency.linearRampToValueAtTime(base, t + 0.12);
-      speedLfo.b.frequency.linearRampToValueAtTime(base * 1.5, t + 0.12);
-      speedLfo.filter.frequency.linearRampToValueAtTime(240 + orbitSpeedNorm * 380, t + 0.12);
-      speedGain.gain.linearRampToValueAtTime(0.045 + orbitSpeedNorm * 0.055, t + 0.12);
-      if (started && Math.abs(orbitSpeedNorm - prev) > 0.08) {
-        rescheduleMelody();
-        rescheduleLoop();
-      }
-    },
-    /** 0..1 rising tone as alignment approaches sweet spot — kept soft under music */
-    setAlignTone(level) {
-      if (!ctx || !alignOsc) return;
-      alignLevel = Math.max(0, Math.min(1, level));
-      const t = ctx.currentTime;
-      const freq = 240 + alignLevel * 420;
-      alignOsc.frequency.linearRampToValueAtTime(freq, t + 0.05);
-      alignFilter.frequency.linearRampToValueAtTime(500 + alignLevel * 1600, t + 0.05);
-      const g = muted ? 0.0001 : (alignLevel > 0.35 ? 0.01 + alignLevel * 0.035 : 0.0001);
-      alignGain.gain.linearRampToValueAtTime(g, t + 0.06);
-    },
-    onDownbeat() {
-      const n = step % 8;
-      return n === 0 || n === 4;
-    },
-    // SFX stings — low gains so music stays audible underneath
-    stingLock() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      const g = this.onDownbeat() ? 0.07 : 0.05;
-      [392, 494, 587].forEach((f, i) => tone(sfxBus, f, t + i * 0.035, 0.28, 'sine', g));
-    },
-    stingPerfect() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      [440, 554, 659, 880].forEach((f, i) => tone(sfxBus, f, t + i * 0.03, 0.32, 'sine', 0.055));
-      tone(sfxBus, 1108, t + 0.12, 0.22, 'triangle', 0.028);
-    },
-    stingMiss() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      tone(sfxBus, 120, t, 0.1, 'triangle', 0.05);
-      tone(sfxBus, 85, t + 0.07, 0.18, 'sine', 0.04);
-    },
-    stingDebris() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      tone(sfxBus, 80, t, 0.07, 'square', 0.055);
-      tone(sfxBus, 55, t + 0.05, 0.2, 'sawtooth', 0.045);
-      tone(sfxBus, 140, t + 0.1, 0.12, 'triangle', 0.03);
-    },
-    stingTimeout() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      tone(sfxBus, 65, t, 0.3, 'sine', 0.055);
-      tone(sfxBus, 49, t + 0.1, 0.35, 'triangle', 0.04);
-    },
-    stingWave() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      [165, 220, 277, 330].forEach((f, i) => tone(sfxBus, f, t + i * 0.07, 0.45, 'sine', 0.045));
-    },
-    stingAutoAlign() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      [330, 415, 494].forEach((f, i) => tone(sfxBus, f, t + i * 0.045, 0.3, 'sine', 0.05));
-    },
-    stingExplosion() {
-      if (!ctx || !started || muted) return;
-      const t = ctx.currentTime;
-      tone(sfxBus, 48, t, 0.75, 'sawtooth', 0.12);
-      tone(sfxBus, 28, t + 0.04, 1.0, 'sine', 0.11);
-      tone(sfxBus, 72, t + 0.08, 0.5, 'triangle', 0.07);
-      tone(sfxBus, 36, t + 0.3, 0.8, 'sine', 0.06);
-      for (const [dur, decay, gain, delay] of [[0.5, 0.14, 0.12, 0], [0.32, 0.06, 0.08, 0.12]]) {
-        const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * decay));
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        const g = ctx.createGain();
-        g.gain.value = gain;
-        const lp = ctx.createBiquadFilter();
-        lp.type = 'lowpass';
-        lp.frequency.value = delay ? 2200 : 700;
-        src.connect(lp);
-        lp.connect(g);
-        g.connect(sfxBus);
-        src.start(t + delay);
-      }
-    },
-    stop() {
-      timers.forEach(clearInterval);
-      timers = [];
-      loopTimer = null;
-      if (melodyTimer) { clearInterval(melodyTimer); melodyTimer = null; }
-      if (ctx) ctx.close();
-      ctx = null;
-      started = false;
-    },
+    start,
+    setWave,
+    setWaveLayer,
+    setOrbitSpeed,
+    setAlign,
+    setAlignTone,
+    setTension,
+    toggleMute,
+    stingPerfect,
+    stingGood,
+    stingOk,
+    stingMiss,
+    stingDebris,
+    stingWave,
+    stingLock,
+    stingBoom,
+    stingAutoAlign,
+    stingExplosion,
+    get muted() { return muted; },
   };
 }

@@ -39,6 +39,7 @@ const STR = {
     wave: (n) => `WAVE ${n}`,
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'FR',
+    hull: 'HULL',
   },
   fr: {
     loadmsg: 'calibration ORBIT…',
@@ -79,6 +80,7 @@ const STR = {
     wave: (n) => `VAGUE ${n}`,
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'EN',
+    hull: 'COQUE',
   },
 };
 
@@ -125,6 +127,7 @@ export function applyDom() {
   set('btnRetry', t('again'));
   set('meterLabel', t('meter'));
   set('heatBadge', t('heat'));
+  set('livesLabel', t('hull'));
   set('btnCoachNext', t('coachTap'));
   set('hint', t('hintFeel'));
   const nameIn = $('nameIn');

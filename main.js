@@ -124,7 +124,15 @@ function updateHud() {
   setText('scoreBox', String(score));
   setText('waveBox', t('wave', wave));
   setText('waveNext', t('snapsLeft', left));
+  const maxL = 5;
   setText('lives', '● '.repeat(lives).trim() || '○');
+  const hp = $('hpFill');
+  const hpWrap = $('hpWrap');
+  if (hp) hp.style.width = `${Math.max(0, Math.min(100, (lives / maxL) * 100))}%`;
+  if (hpWrap) {
+    hpWrap.classList.toggle('hurt', lives <= 3 && lives > 1);
+    hpWrap.classList.toggle('critical', lives <= 1);
+  }
   const fill = $('meterFill');
   if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
   const btn = $('snapBtn');
@@ -393,9 +401,20 @@ function stackBonus(primary) {
   return { bonus, tags };
 }
 
+function flashHp() {
+  const w = $('hpWrap');
+  if (!w) return;
+  w.classList.add('hurt');
+  clearTimeout(flashHp._t);
+  flashHp._t = setTimeout(() => {
+    if (lives > 3) w.classList.remove('hurt');
+  }, 500);
+}
+
 function failLife(reason) {
   if (over || endingCinematic) return;
   lives -= 1;
+  flashHp();
   combo = 0;
   perfectStreak = 0;
   heatOn = false;
@@ -424,7 +443,7 @@ function doSnap() {
 
   if (target.kind === KIND.DEBRIS) {
     // distinct bad FX
-    audio.stingDebris?.() || audio.stingMiss();
+    if (audio.stingDebris) audio.stingDebris(); else audio.stingMiss();
     flash('miss');
     camShake = 0.55;
     if (vfx) {
@@ -451,8 +470,9 @@ function doSnap() {
   bestCombo = Math.max(bestCombo, combo);
   snapsInWave += 1;
 
-  if (grade === 'PERFECT') audio.stingPerfect?.() || audio.stingLock();
-  else audio.stingLock();
+  if (grade === 'PERFECT') audio.stingPerfect();
+  else if (grade === 'GOOD') audio.stingGood();
+  else audio.stingOk();
 
   const pos = target.mesh.position.clone();
   if (grade === 'PERFECT') {

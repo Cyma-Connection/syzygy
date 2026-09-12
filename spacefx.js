@@ -161,25 +161,14 @@ export function createSunGlow(amber = 0xe8a04a) {
     );
     return m;
   };
-  // volumetric-ish stacked additive shells (no textures)
-  g.add(shell(21, 0.2, amber, 24));
-  g.add(shell(26, 0.14, amber, 20));
-  g.add(shell(32, 0.09, amber, 18));
-  g.add(shell(40, 0.05, 0x6b8cff, 16));
-  g.add(shell(48, 0.03, 0x6b8cff, 14));
-  // equatorial torus glow
-  const torus = new THREE.Mesh(
-    new THREE.TorusGeometry(24, 1.8, 10, 48),
-    new THREE.MeshBasicMaterial({
-      color: amber,
-      transparent: true,
-      opacity: 0.12,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-  );
-  torus.rotation.x = Math.PI / 2;
-  g.add(torus);
+  // Soft spherical corona only (reads as a star, not a gadget with a hat)
+  g.add(shell(20, 0.28, amber, 28));
+  g.add(shell(24, 0.16, amber, 24));
+  g.add(shell(29, 0.09, amber, 20));
+  g.add(shell(36, 0.045, amber, 18));
+  g.add(shell(44, 0.025, 0xffc078, 16));
+  // very faint cold rim — no tall offset mesh
+  g.add(shell(52, 0.018, 0x6b8cff, 14));
   return g;
 }
 
