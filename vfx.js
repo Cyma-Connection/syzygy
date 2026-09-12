@@ -7,7 +7,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   scene.add(root);
 
   // --- craft ion trail ---
-  const TRAIL_N = 64;
+  const TRAIL_N = 96;
   const trailPos = new Float32Array(TRAIL_N * 3);
   const trailGeo = new THREE.BufferGeometry();
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
@@ -16,9 +16,10 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
     new THREE.LineBasicMaterial({
       color: amber,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.72,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      linewidth: 2,
     })
   );
   root.add(trail);
@@ -191,7 +192,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
         (Math.random() - 0.5) * 8
       );
       root.add(mesh);
-      shards.push({ mesh, vel, spin, life: 0.55 + Math.random() * 0.35 });
+      shards.push({ mesh, vel, spin, life: 0.65 + Math.random() * 0.45 });
     }
   }
 
@@ -212,7 +213,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
     update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false } = {}) {
       // trail
       if (craftPos) {
-        if (craftPos.distanceToSquared(lastCraft) > 0.4) {
+        if (craftPos.distanceToSquared(lastCraft) > 0.18) {
           trailI = (trailI + 1) % TRAIL_N;
           trailPos[trailI * 3] = craftPos.x;
           trailPos[trailI * 3 + 1] = craftPos.y;
@@ -253,7 +254,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
       sparks.material.opacity = 0.35 + Math.min(1, speed / 40) * 0.5;
 
       // alignment / HEAT orbit trail (amber when heat streak)
-      trail.material.opacity = 0.35 + alignT * 0.5 + (heat ? 0.22 : 0);
+      trail.material.opacity = 0.5 + alignT * 0.4 + (heat ? 0.25 : 0);
       if (heat) trail.material.color.setHex(amber);
       else trail.material.color.setHex(alignT > 0.6 ? cold : amber);
 
@@ -409,5 +410,72 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
     },
     shatterAt,
     nearMissBurst,
+
+    /** Cinematic KO: big flash rings + dense shatter + debris burst (budget-aware). */
+    systemBoom(origin = new THREE.Vector3()) {
+      pulseRing(origin, amber, 120);
+      pulseRing(origin, cold, 90);
+      pulseRing(origin, amber, 70);
+      // geometric shatter — larger shards, longer life, outward punch
+      const N = 48;
+      for (let i = 0; i < N; i++) {
+        const isCone = i % 3 === 0;
+        const big = i < 12;
+        const mesh = new THREE.Mesh(
+          isCone
+            ? new THREE.ConeGeometry(big ? 1.1 : 0.45, big ? 2.4 : 1.2, 5)
+            : new THREE.BoxGeometry(
+                (big ? 1.4 : 0.55) + Math.random() * 0.9,
+                big ? 0.55 : 0.3,
+                (big ? 1.2 : 0.45) + Math.random() * 0.7
+              ),
+          new THREE.MeshBasicMaterial({
+            color: i % 3 === 0 ? amber : i % 3 === 1 ? cold : 0xe6dcc8,
+            transparent: true,
+            opacity: 1,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          })
+        );
+        mesh.position.copy(origin);
+        const vel = new THREE.Vector3(
+          Math.random() - 0.5,
+          Math.random() * 0.85,
+          Math.random() - 0.5
+        ).normalize().multiplyScalar(32 + Math.random() * 55);
+        const spin = new THREE.Vector3(
+          (Math.random() - 0.5) * 12,
+          (Math.random() - 0.5) * 12,
+          (Math.random() - 0.5) * 12
+        );
+        root.add(mesh);
+        shards.push({ mesh, vel, spin, life: 0.9 + Math.random() * 0.55 });
+      }
+      // particle debris burst
+      burst.material.color.setHex(amber);
+      burst.material.opacity = 1;
+      burst.material.size = 3.4;
+      burstT = 1.8;
+      for (let i = 0; i < BURST_N; i++) {
+        const dir = new THREE.Vector3(
+          Math.random() - 0.5,
+          Math.random() - 0.35,
+          Math.random() - 0.5
+        ).normalize();
+        burstVel[i] = dir.multiplyScalar(35 + Math.random() * 80);
+        burstPos[i * 3] = origin.x;
+        burstPos[i * 3 + 1] = origin.y;
+        burstPos[i * 3 + 2] = origin.z;
+      }
+      burst.geometry.attributes.position.needsUpdate = true;
+      // spark fill
+      for (let i = 0; i < SPARK_N; i++) {
+        sparkPos[i * 3] = origin.x + (Math.random() - 0.5) * 30;
+        sparkPos[i * 3 + 1] = origin.y + (Math.random() - 0.5) * 20;
+        sparkPos[i * 3 + 2] = origin.z + (Math.random() - 0.5) * 30;
+        sparkLife[i] = 0.8 + Math.random() * 0.6;
+      }
+      sparkGeo.attributes.position.needsUpdate = true;
+    },
   };
 }

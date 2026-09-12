@@ -20,3 +20,6 @@ Major pivot (2026-09-12): auto-orbit craft; feel alignment; SNAP. Kept polish (w
 ## Leaderboard
 - Local: localStorage
 - Global: best-effort remote
+
+## Polish (2026-09-12)
+- Synth speed line, larger halo craft, big KO boom, **5 lives**, gentler early orbit / wider Perfect.

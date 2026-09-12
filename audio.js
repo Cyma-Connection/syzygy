@@ -9,6 +9,9 @@ export function createSpaceAudio() {
   let alignOsc, alignFilter;
   let orbitSpeedNorm = 0.5;
   let alignLevel = 0;
+  let melodyTimer = null;
+  let melodyStep = 0;
+  let melodyIntervalMs = 220;
   const bpm = 118;
   const beat = 60 / bpm;
 
@@ -153,6 +156,53 @@ export function createSpaceAudio() {
     src.start(t);
   }
 
+  // continuous futuristic melodic line — densifies with orbital speed
+  // minor / spacey motifs (procedural only)
+  const melodyMotifs = [
+    [0, 3, 7, 10, 12, 10, 7, 3],
+    [0, 5, 7, 12, 15, 12, 7, 5],
+    [0, 3, 8, 12, 10, 8, 5, 3],
+    [0, 7, 12, 15, 19, 15, 12, 7],
+  ];
+
+  function melodyTick() {
+    if (!ctx || muted || !started) {
+      melodyStep++;
+      return;
+    }
+    const t = ctx.currentTime;
+    const motif = melodyMotifs[Math.min(3, Math.floor(orbitSpeedNorm))];
+    const deg = motif[melodyStep % motif.length];
+    // base rises with speed: ~185 Hz → ~370+ Hz
+    const root = 185 * Math.pow(2, Math.min(1.05, (orbitSpeedNorm - 0.2) * 0.55));
+    const f = root * Math.pow(2, deg / 12);
+    const dens = Math.min(1, (orbitSpeedNorm - 0.25) / 1.6);
+    const g = 0.038 + dens * 0.055;
+    const dur = Math.max(0.07, melodyIntervalMs / 1000 * 0.72);
+    tone(arpGain, f, t, dur, dens > 0.55 ? 'sawtooth' : 'triangle', g);
+    // octave sparkle when fast
+    if (dens > 0.45 && melodyStep % 2 === 0) {
+      tone(leadGain, f * 2, t + 0.01, dur * 0.55, 'sine', 0.018 + dens * 0.02);
+    }
+    // densify: occasional fifth harmony at high speed
+    if (dens > 0.7 && melodyStep % 4 === 1) {
+      tone(arpGain, f * 1.5, t + 0.015, dur * 0.5, 'triangle', 0.022);
+    }
+    melodyStep++;
+  }
+
+  function rescheduleMelody() {
+    if (melodyTimer) {
+      clearInterval(melodyTimer);
+      melodyTimer = null;
+    }
+    if (!started) return;
+    // interval shrinks as orbit speeds up (slower bed → faster arp)
+    const n = Math.max(0.2, Math.min(2.5, orbitSpeedNorm));
+    melodyIntervalMs = Math.max(70, 280 - n * 95);
+    melodyTimer = setInterval(melodyTick, melodyIntervalMs);
+  }
+
   // futuristic 16-step bass motif
   const bassMotif = [55, 0, 55, 82.4, 41.2, 0, 55, 0, 55, 73.4, 0, 55, 110, 0, 49, 55];
 
@@ -172,14 +222,13 @@ export function createSpaceAudio() {
       if (waveLayer >= 2) {
         hat(t, n % 2 ? 0.05 : 0.028);
       }
-      if (waveLayer >= 3) {
-        const scale = [0, 3, 5, 7, 10, 12, 15, 10];
-        const f = 247 * Math.pow(2, scale[n % 8] / 12);
-        tone(arpGain, f, t, 0.12, 'triangle', 0.048);
+      // wave layers add hats + sparse accents; continuous melody owns melodic line
+      if (waveLayer >= 3 && (n === 2 || n === 10)) {
+        tone(leadGain, 311, t, 0.18, 'triangle', 0.028);
       }
       if (waveLayer >= 4) {
-        if (n === 0 || n === 8) tone(leadGain, 349, t, 0.38, 'sawtooth', 0.032);
-        if (n === 4 || n === 12) tone(leadGain, 415, t, 0.32, 'sawtooth', 0.028);
+        if (n === 0 || n === 8) tone(leadGain, 349, t, 0.38, 'sawtooth', 0.026);
+        if (n === 4 || n === 12) tone(leadGain, 415, t, 0.32, 'sawtooth', 0.022);
       }
       // ghost offbeat pulse for space rhythm
       if (n % 8 === 6) tone(padGain, 98, t, 0.2, 'sine', 0.04);
@@ -201,12 +250,17 @@ export function createSpaceAudio() {
       if (!started) {
         started = true;
         scheduleLoop();
+        rescheduleMelody();
       }
       muted = false;
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
       master.gain.linearRampToValueAtTime(0.42, t + 1.0);
+      // melody bus always open (mute still kills master)
+      arpGain.gain.linearRampToValueAtTime(1, t + 0.2);
+      leadGain.gain.linearRampToValueAtTime(0.85, t + 0.2);
       this.setWaveLayer(1);
+      rescheduleMelody();
     },
     setMuted(m) {
       muted = !!m;
@@ -228,12 +282,14 @@ export function createSpaceAudio() {
       if (!ctx) return;
       const t = ctx.currentTime;
       hatGain.gain.linearRampToValueAtTime(waveLayer >= 2 ? 1 : 0, t + 0.3);
-      arpGain.gain.linearRampToValueAtTime(waveLayer >= 3 ? 1 : 0, t + 0.3);
-      leadGain.gain.linearRampToValueAtTime(waveLayer >= 4 ? 1 : 0, t + 0.3);
+      // keep arp/lead open for continuous speed melody
+      arpGain.gain.linearRampToValueAtTime(1, t + 0.3);
+      leadGain.gain.linearRampToValueAtTime(0.85 + (waveLayer >= 4 ? 0.15 : 0), t + 0.3);
     },
     /** Map orbital rad/s into speed-bed pitch/intensity */
     setOrbitSpeed(radPerSec) {
       if (!ctx || !speedLfo) return;
+      const prev = orbitSpeedNorm;
       orbitSpeedNorm = Math.max(0.2, Math.min(2.5, radPerSec));
       const t = ctx.currentTime;
       const base = 48 + orbitSpeedNorm * 55;
@@ -241,6 +297,8 @@ export function createSpaceAudio() {
       speedLfo.b.frequency.linearRampToValueAtTime(base * 1.5, t + 0.12);
       speedLfo.filter.frequency.linearRampToValueAtTime(280 + orbitSpeedNorm * 420, t + 0.12);
       speedGain.gain.linearRampToValueAtTime(0.03 + orbitSpeedNorm * 0.045, t + 0.12);
+      // retarget melody density when speed shifts meaningfully
+      if (started && Math.abs(orbitSpeedNorm - prev) > 0.08) rescheduleMelody();
     },
     /** 0..1 rising tone as alignment approaches sweet spot */
     setAlignTone(level) {
@@ -301,24 +359,33 @@ export function createSpaceAudio() {
     stingExplosion() {
       if (!ctx || !started || muted) return;
       const t = ctx.currentTime;
-      tone(master, 55, t, 0.5, 'sawtooth', 0.22);
-      tone(master, 36, t + 0.05, 0.7, 'sine', 0.2);
-      tone(master, 90, t + 0.1, 0.35, 'square', 0.1);
-      // noise burst
-      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.12));
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const g = ctx.createGain();
-      g.gain.value = 0.18;
-      src.connect(g);
-      g.connect(master);
-      src.start(t);
+      tone(master, 48, t, 0.85, 'sawtooth', 0.28);
+      tone(master, 28, t + 0.04, 1.1, 'sine', 0.26);
+      tone(master, 72, t + 0.08, 0.55, 'square', 0.16);
+      tone(master, 110, t + 0.15, 0.4, 'sawtooth', 0.12);
+      tone(master, 36, t + 0.35, 0.9, 'triangle', 0.14);
+      // dual noise bursts — boom + crack
+      for (const [dur, decay, gain, delay] of [[0.55, 0.14, 0.28, 0], [0.35, 0.06, 0.2, 0.12]]) {
+        const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * decay));
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = gain;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = delay ? 2800 : 900;
+        src.connect(lp);
+        lp.connect(g);
+        g.connect(master);
+        src.start(t + delay);
+      }
     },
     stop() {
       timers.forEach(clearInterval);
       timers = [];
+      if (melodyTimer) { clearInterval(melodyTimer); melodyTimer = null; }
       if (ctx) ctx.close();
       ctx = null;
       started = false;

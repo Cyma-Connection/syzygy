@@ -11,25 +11,25 @@ export default function (THREE) {
   ];
   const bell = new THREE.Mesh(
     new THREE.LatheGeometry(pts, 24),
-    (() => { const m = new THREE.MeshStandardMaterial({{ color: brass, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }}); m.name = "metal"; return m; })()
+    (() => { const m = new THREE.MeshStandardMaterial({ color: brass, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }); m.name = "metal"; return m; })()
   );
   g.add(bell);
   const axis = new THREE.Mesh(
     new THREE.CylinderGeometry(0.05, 0.05, 5.7, 8),
-    (() => { const m = new THREE.MeshStandardMaterial({{ color: bone, roughness: 0.45, metalness: 0.45 }}); m.name = "metal"; return m; })()
+    (() => { const m = new THREE.MeshStandardMaterial({ color: bone, roughness: 0.45, metalness: 0.45 }); m.name = "metal"; return m; })()
   );
   axis.position.y = 2.85;
   g.add(axis);
   const lip = new THREE.Mesh(
     new THREE.TorusGeometry(1.75, 0.08, 8, 32),
-    (() => { const m = new THREE.MeshStandardMaterial({{ color: bone, roughness: 0.4, metalness: 0.5 }}); m.name = "metal"; return m; })()
+    (() => { const m = new THREE.MeshStandardMaterial({ color: bone, roughness: 0.4, metalness: 0.5 }); m.name = "metal"; return m; })()
   );
   lip.rotation.x = Math.PI / 2;
   lip.position.y = 0.2;
   g.add(lip);
   const clapper = new THREE.Mesh(
     new THREE.SphereGeometry(0.35, 12, 10),
-    (() => { const m = new THREE.MeshStandardMaterial({{ color: obs, roughness: 0.5, metalness: 0.3 }}); m.name = "stone"; return m; })()
+    (() => { const m = new THREE.MeshStandardMaterial({ color: obs, roughness: 0.5, metalness: 0.3 }); m.name = "stone"; return m; })()
   );
   clapper.position.y = 1.2;
   g.add(clapper);

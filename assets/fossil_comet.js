@@ -8,14 +8,14 @@ export default function (THREE) {
   }
   const nucleus = new THREE.Mesh(
     new THREE.LatheGeometry(pts, 14),
-    (() => { const m = new THREE.MeshStandardMaterial({{ color: brass, roughness: 0.6, metalness: 0.35 }}); m.name = "metal"; return m; })()
+    (() => { const m = new THREE.MeshStandardMaterial({ color: brass, roughness: 0.6, metalness: 0.35 }); m.name = "metal"; return m; })()
   );
   nucleus.rotation.x = -Math.PI / 2;
   g.add(nucleus);
   for (let i = 0; i < 8; i++) {
     const tail = new THREE.Mesh(
       new THREE.ConeGeometry(0.12, 1.6 + i * 0.18, 5),
-      (() => { const m = new THREE.MeshStandardMaterial({{ color: bone, roughness: 0.7, transparent: true, opacity: 0.8, emissive: amber, emissiveIntensity: 0.05 }}); m.name = "metal"; return m; })()
+      (() => { const m = new THREE.MeshStandardMaterial({ color: bone, roughness: 0.7, transparent: true, opacity: 0.8, emissive: amber, emissiveIntensity: 0.05 }); m.name = "metal"; return m; })()
     );
     const a = (i / 8) * Math.PI * 2;
     tail.position.set(Math.cos(a) * 0.3, Math.sin(a) * 0.3, -2.0 - i * 0.12);
@@ -25,7 +25,7 @@ export default function (THREE) {
   for (let i = 0; i < 6; i++) {
     const pit = new THREE.Mesh(
       new THREE.SphereGeometry(0.12, 6, 6),
-      (() => { const m = new THREE.MeshStandardMaterial({{ color: 0x7a5c38, roughness: 0.8 }}); m.name = "metal"; return m; })()
+      (() => { const m = new THREE.MeshStandardMaterial({ color: 0x7a5c38, roughness: 0.8 }); m.name = "metal"; return m; })()
     );
     const a = (i / 6) * Math.PI * 2;
     pit.position.set(Math.cos(a) * 0.55, Math.sin(a) * 0.55, 0.4);

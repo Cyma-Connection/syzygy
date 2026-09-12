@@ -5,7 +5,7 @@
 **Last updated:** 2026-09-12  
 **Current live build:** https://cyma-connection.github.io/syzygy/  
 **Source repo:** https://github.com/Cyma-Connection/syzygy  
-**Latest known commit family:** ORBIT SNAP pivot (auto-orbit + multi-object SNAP)  
+**Latest known commit family:** Polish — synth speed line, visible craft, big KO boom, 5 lives (on ORBIT SNAP core)  
 **Jam:** [404 Game Jam](https://game.404.xyz/) — closes **25 Sep 2026, 23:59 UTC**
 
 ---
@@ -40,7 +40,7 @@ Do **not** revert to the contemplative tether loop unless explicitly asked. Alig
 | SNAP | Debris → lose life + bad FX. Else Perfect/Good/OK × combo × wave; **stack bonus** if planet/star also near same ray. Weak/nothing → life loss. |
 | Wave clear | N successful non-debris snaps → wave++; **sun scale + emissive/brightness persist** for the run. |
 | LOCK (`#btnAutoAlign`) | Unlocks after 3 Perfect (heat). ~2.5s steer toward next good target / soft snap; charge/cooldown UI. Label LOCK/SYNC. |
-| Game over | Lives 0 → geometric shatter of craft + objects + **sun**, then OVER UI. |
+| Game over | **5 lives**; lives 0 → big geometric shatter (sun + system) + camera punch, then OVER UI. |
 | Coach | 3 screens: ORBIT / FEEL ALIGN / SNAP (debris danger). Flag `syzygy_coach_v1`. |
 | Extras | Near-miss sparks, heat amber trail, boss every 5 waves (denser debris + big relic), Perfect slow-mo. |
 

@@ -27,7 +27,7 @@ let over = false;
 
 let score = 0;
 let wave = 1;
-let lives = 3;
+let lives = 5;
 let combo = 0;
 let bestCombo = 0;
 let snapsInWave = 0;
@@ -93,16 +93,17 @@ function place(obj, theta, r = 78, y = 0) {
 
 function waveParams(w) {
   return {
-    baseSpeed: 0.48 + w * 0.07,
-    soft: Math.max(0.1, 0.32 - w * 0.012),
+    // gentler early waves; still ramps for later tension
+    baseSpeed: 0.40 + w * 0.065,
+    soft: Math.max(0.12, 0.34 - w * 0.011),
     perWave: 5,
     maxObjects: Math.min(8, 3 + Math.floor(w / 2)),
     debrisChance: Math.min(0.42, 0.08 + w * 0.035),
   };
 }
 
-function perfectBand(w) { return Math.max(0.9, 0.98 - w * 0.005); }
-function goodBand(w) { return Math.max(0.72, 0.9 - w * 0.01); }
+function perfectBand(w) { return Math.max(0.88, 0.96 - w * 0.005); }
+function goodBand(w) { return Math.max(0.70, 0.88 - w * 0.01); }
 
 function updateHud() {
   const need = waveParams(wave).perWave;
@@ -469,10 +470,15 @@ function updateHeat() {
 function updateHeatVisual() {
   if (!craft) return;
   craft.traverse((n) => {
-    if (n.isMesh && n.material && n.material.emissive) {
-      n.material.emissive = new THREE.Color(heatOn ? AMBER : 0x000000);
-      n.material.emissiveIntensity = heatOn ? 0.55 : 0;
+    if (!n.isMesh || !n.material || !n.material.emissive) return;
+    if (n.userData?.craftHalo) {
+      // halo stays cold/amber readable; heat only boosts intensity
+      n.material.emissive = new THREE.Color(heatOn ? AMBER : COLD);
+      n.material.emissiveIntensity = heatOn ? 1.1 : (n.userData.haloBase ?? 0.65);
+      return;
     }
+    n.material.emissive = new THREE.Color(heatOn ? AMBER : 0x1a2240);
+    n.material.emissiveIntensity = heatOn ? 0.6 : 0.18;
   });
 }
 
@@ -558,15 +564,18 @@ function tickAutoAlign(dt) {
 
 function startRun() {
   if (started && !over && state === STATE.PLAY) return;
-  score = 0; wave = 1; lives = 3; combo = 0; bestCombo = 0; snapsInWave = 0;
+  score = 0; wave = 1; lives = 5; combo = 0; bestCombo = 0; snapsInWave = 0;
   perfectStreak = 0; heatOn = false;
   playElapsed = 0; over = false; started = true; state = STATE.PLAY;
   endingCinematic = false;
-  zoom = 1; camDist = 120;
+  zoom = 1; camDist = 110;
   craftTheta = 0.4;
   orbitSpeed = waveParams(1).baseSpeed;
   orbitDir = 1;
   sunScale = 1;
+  if (sun) sun.visible = true;
+  if (sunGlow) sunGlow.visible = true;
+  if (craft) craft.visible = true;
   applySunGrowth();
   autoAlignUnlocked = false;
   autoAlignReady = false;
@@ -590,25 +599,34 @@ function endRun() {
   over = true;
   state = STATE.OVER;
   $('hud')?.classList.remove('on');
-  // cinematic geometric shatter: craft + objects + sun
+  // BIG cinematic KO — sun + system shatter, flash, camera punch
   audio.stingExplosion?.();
-  camShake = 0.9;
-  camPunch = 0.5;
+  camShake = 1.6;
+  camPunch = 1.1;
   flash('miss');
-  if (vfx && craft) {
-    vfx.shatterAt(craft.position.clone(), AMBER, 28, 1.4);
-    vfx.lockBurst(craft.position.clone(), BAD);
+  if (vfx) {
+    vfx.systemBoom?.(new THREE.Vector3(0, 0, 0));
+    if (craft) {
+      vfx.shatterAt(craft.position.clone(), AMBER, 36, 1.8);
+      vfx.lockBurst(craft.position.clone(), BAD);
+    }
   }
   for (const o of [...world]) {
-    if (vfx) vfx.shatterAt(o.mesh.position.clone(), o.kind === KIND.DEBRIS ? BAD : COLD, 10, 1);
+    if (vfx) vfx.shatterAt(o.mesh.position.clone(), o.kind === KIND.DEBRIS ? BAD : COLD, 14, 1.25);
     removeObject(o);
   }
-  if (sun && vfx) {
-    vfx.shatterAt(new THREE.Vector3(0, 0, 0), AMBER, 36, 1.6);
-    vfx.pulseAt(new THREE.Vector3(), AMBER);
-    vfx.lockBurst(new THREE.Vector3(2, 0, 0), AMBER);
+  if (sun) {
+    // hide sun body so shatter reads as the star dying
+    sun.visible = false;
+    if (sunGlow) sunGlow.visible = false;
+    if (vfx) {
+      vfx.shatterAt(new THREE.Vector3(0, 0, 0), AMBER, 42, 2.0);
+      vfx.pulseAt(new THREE.Vector3(), AMBER);
+      vfx.lockBurst(new THREE.Vector3(0, 0, 0), AMBER);
+    }
   }
-  // brief delay then OVER UI
+  if (craft) craft.visible = false;
+  // longer beat before OVER UI so boom lands
   setTimeout(() => {
     $('over')?.classList.add('on');
     setText('overSub', `Score ${score} · Wave ${wave} · Best combo x${bestCombo}`);
@@ -618,7 +636,7 @@ function endRun() {
       setTimeout(() => nameIn.focus(), 50);
     }
     publishGame();
-  }, 700);
+  }, 1100);
 }
 
 async function boot() {
@@ -634,8 +652,9 @@ async function boot() {
   scene.background = new THREE.Color(VOID);
   scene.fog = new THREE.FogExp2(0x060814, 0.0014);
 
-  camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 1000);
-  camera.position.set(0, 40, camDist);
+  camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 1000);
+  camDist = 110;
+  camera.position.set(0, 32, camDist);
 
   spacefx = createSpaceBackdrop(scene, { amber: AMBER, cold: COLD });
   scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.5));
@@ -667,7 +686,66 @@ async function boot() {
   scene.add(sunGlow);
   vfx = createVfx(scene, { amber: AMBER, cold: COLD });
 
-  craft = await ASSET('./assets/cartographer_craft.js', { height: 0.7 });
+  // Style-lock length ~2 m; load taller for readable silhouette at orbit distance
+  craft = await ASSET('./assets/cartographer_craft.js', { height: 2.4 });
+  // Cold/amber halo + silhouette boost so craft is anticipatable vs sun/targets
+  const haloMat = (color, opacity, intensity) => {
+    const m = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    return m;
+  };
+  const haloShell = new THREE.Mesh(
+    new THREE.SphereGeometry(1.55, 16, 12),
+    haloMat(COLD, 0.22, 0.7)
+  );
+  haloShell.userData.craftHalo = true;
+  haloShell.userData.haloBase = 0.7;
+  // fake emissive fields for updateHeatVisual path (BasicMaterial has no emissive — tag shell only)
+  const haloRing = new THREE.Mesh(
+    new THREE.TorusGeometry(1.75, 0.08, 8, 32),
+    haloMat(AMBER, 0.55, 0.8)
+  );
+  haloRing.rotation.x = Math.PI / 2;
+  haloRing.userData.craftHalo = true;
+  const haloRing2 = new THREE.Mesh(
+    new THREE.TorusGeometry(1.35, 0.05, 6, 28),
+    haloMat(COLD, 0.45, 0.7)
+  );
+  haloRing2.rotation.y = Math.PI / 2;
+  const craftLight = new THREE.PointLight(COLD, 1.4, 28);
+  craftLight.position.set(0, 1.2, 0);
+  // emissive outline proxy: thin bright boxes along hull length
+  const keel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.18, 3.2),
+    new THREE.MeshStandardMaterial({
+      color: 0xe6dcc8,
+      emissive: COLD,
+      emissiveIntensity: 0.85,
+      roughness: 0.35,
+      metalness: 0.5,
+    })
+  );
+  keel.position.y = 0.9;
+  keel.userData.craftHalo = true;
+  keel.userData.haloBase = 0.85;
+  craft.add(haloShell);
+  craft.add(haloRing);
+  craft.add(haloRing2);
+  craft.add(keel);
+  craft.add(craftLight);
+  // slight baseline emissive on hull materials for silhouette
+  craft.traverse((n) => {
+    if (n.isMesh && n.material && n.material.emissive && !n.userData.craftHalo) {
+      n.material.emissive = new THREE.Color(0x1a2240);
+      n.material.emissiveIntensity = 0.18;
+    }
+  });
   place(craft, craftTheta, 95);
   scene.add(craft);
 
@@ -830,11 +908,10 @@ function frame(now) {
     playElapsed += raw;
     audio.setTension(Math.min(1, wave / 12));
     audio.setWaveLayer?.(wave);
-    audio.setOrbitSpeed?.(orbitSpeed);
-
     // Auto-orbit — speed rises slightly within wave
     const within = snapsInWave / Math.max(1, waveParams(wave).perWave);
     const spd = orbitSpeed * (1 + within * 0.12);
+    audio.setOrbitSpeed?.(spd);
     craftTheta += orbitDir * spd * dt;
 
     tickAutoAlign(dt);
@@ -877,7 +954,7 @@ function frame(now) {
   if (vfx) {
     vfx.update(dt, {
       craftPos: craft?.position,
-      speed: Math.abs(orbitSpeed) * 50,
+      speed: Math.abs(orbitSpeed) * 70,
       alignT: align,
       sunScale,
       heat: heatOn,
@@ -885,26 +962,32 @@ function frame(now) {
   }
 
   if (camera) {
-    const target = new THREE.Vector3(Math.cos(craftTheta) * 40, 18, Math.sin(craftTheta) * 40);
+    // Bias look-at toward craft so silhouette + aim line stay readable vs sun
+    const craftFocus = craft
+      ? craft.position.clone().multiplyScalar(0.55).setY(6)
+      : new THREE.Vector3(Math.cos(craftTheta) * 50, 6, Math.sin(craftTheta) * 50);
     let dist = camDist;
     if (camPunch > 0) {
+      const punchMax = endingCinematic ? 1.1 : 0.35;
       camPunch = Math.max(0, camPunch - dt);
-      const u = 1 - camPunch / 0.3;
-      dist += Math.sin(u * Math.PI) * 14;
+      const u = 1 - camPunch / Math.max(0.2, punchMax);
+      dist += Math.sin(u * Math.PI) * (endingCinematic ? 28 : 14);
     }
+    // Orbit slightly behind craft so ship sits mid-frame with sun left/right
     const camGoal = new THREE.Vector3(
-      Math.cos(craftTheta + 0.9) * dist,
-      28 + (1.2 - zoom) * 10,
-      Math.sin(craftTheta + 0.9) * dist
+      Math.cos(craftTheta + 0.75) * dist,
+      22 + (1.2 - zoom) * 12,
+      Math.sin(craftTheta + 0.75) * dist
     );
     if (camShake > 0) {
       camShake = Math.max(0, camShake - dt);
-      camGoal.x += (Math.random() - 0.5) * 3.5 * camShake;
-      camGoal.y += (Math.random() - 0.5) * 3.5 * camShake;
+      const amp = endingCinematic ? 7 : 3.5;
+      camGoal.x += (Math.random() - 0.5) * amp * camShake;
+      camGoal.y += (Math.random() - 0.5) * amp * camShake;
     }
-    camera.position.lerp(camGoal, 1 - Math.exp(-3 * dt));
-    camera.lookAt(target.x * 0.2, 4, target.z * 0.2);
-    camera.fov = THREE.MathUtils.lerp(camera.fov, 48 + zoom * 10, 0.1);
+    camera.position.lerp(camGoal, 1 - Math.exp(-3.4 * dt));
+    camera.lookAt(craftFocus.x, craftFocus.y, craftFocus.z);
+    camera.fov = THREE.MathUtils.lerp(camera.fov, 46 + zoom * 9, 0.1);
     camera.updateProjectionMatrix();
   }
 
