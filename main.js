@@ -468,6 +468,12 @@ function bindInput(canvas){
   canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); }, {passive:false});
 
   $('snapBtn')?.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); doSnap(); });
+  $('btnMute')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const m = audio.toggleMute();
+    const b = $('btnMute');
+    if (b) { b.classList.toggle('off', m); b.textContent = m ? 'Mute' : '♪'; }
+  });
   $('btnStart')?.addEventListener('click', ()=> startRun());
   $('btnRetry')?.addEventListener('click', ()=> startRun());
   $('btnLb')?.addEventListener('click', ()=> openBoard('local'));
