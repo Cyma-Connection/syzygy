@@ -36,7 +36,7 @@ export function createSpaceAudio() {
     master.connect(ctx.destination);
 
     music = ctx.createGain();
-    music.gain.value = 0.85;
+    music.gain.value = 0.95;
     music.connect(master);
 
     sfx = ctx.createGain();
@@ -44,23 +44,23 @@ export function createSpaceAudio() {
     sfx.connect(master);
 
     bassGain = ctx.createGain();
-    bassGain.gain.value = 0.22;
+    bassGain.gain.value = 0.08; // quiet continuous bed
     bassGain.connect(music);
 
     padGain = ctx.createGain();
-    padGain.gain.value = 0.28;
+    padGain.gain.value = 0.10; // quiet continuous pads
     padGain.connect(music);
 
     leadGain = ctx.createGain();
-    leadGain.gain.value = 0.32;
+    leadGain.gain.value = 0.42; // melodic phrases louder than bed
     leadGain.connect(music);
 
     // Continuous pads in MIDRANGE (phone-audible) — sine/triangle only, no noise
     const padSpecs = [
-      [ROOT, 'sine', 0.2],
-      [ROOT * 1.5, 'sine', 0.14],       // fifth
-      [ROOT * 2, 'triangle', 0.1],      // octave
-      [ROOT * 2.5, 'sine', 0.07],       // high fifth
+      [ROOT, 'sine', 0.08],
+      [ROOT * 1.5, 'sine', 0.05],       // fifth
+      [ROOT * 2, 'triangle', 0.04],      // octave
+      [ROOT * 2.5, 'sine', 0.025],       // high fifth
     ];
     for (const [f, type, g] of padSpecs) {
       const o = ctx.createOscillator();
@@ -85,7 +85,7 @@ export function createSpaceAudio() {
       o.type = 'sine';
       o.frequency.value = ROOT / 2;
       const gg = ctx.createGain();
-      gg.gain.value = 0.35;
+      gg.gain.value = 0.18;
       o.connect(gg);
       gg.connect(bassGain);
       o.start();
@@ -206,8 +206,8 @@ export function createSpaceAudio() {
     waveLayer = Math.max(1, w | 0);
     if (!padGain || !ctx) return;
     const open = Math.min(1, (waveLayer - 1) / 6);
-    leadGain.gain.setTargetAtTime(0.32 + open * 0.12, ctx.currentTime, 0.4);
-    padGain.gain.setTargetAtTime(0.28 + open * 0.08, ctx.currentTime, 0.4);
+    leadGain.gain.setTargetAtTime(0.42 + open * 0.1, ctx.currentTime, 0.4);
+    padGain.gain.setTargetAtTime(0.10 + open * 0.04, ctx.currentTime, 0.4);
   }
   function setWaveLayer(w) { setWave(w); }
 
@@ -228,7 +228,7 @@ export function createSpaceAudio() {
   function setAlign(level) {
     if (!ctx || !alignGain) return;
     const a = Math.max(0, Math.min(1, level));
-    alignGain.gain.setTargetAtTime(0.0001 + a * a * 0.12, ctx.currentTime, 0.05);
+    alignGain.gain.setTargetAtTime(0.0001 + a * a * 0.05, ctx.currentTime, 0.05);
     alignOsc.frequency.setTargetAtTime(550 + a * 400, ctx.currentTime, 0.08);
   }
   function setAlignTone(level) { setAlign(level); }
