@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { ASSET } from './assetlib.js';
 import { createSpaceAudio } from './audio.js';
 import { createSpaceBackdrop, createSunGlow } from './spacefx.js';
+import { createVfx } from './vfx.js';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -70,6 +71,8 @@ let coachStep = 0;
 let movedOnce = false;
 let spacefx = null;
 let sunGlow = null;
+let vfx = null;
+let alignHeat = 0;
 let audio = createSpaceAudio();
 let clockT = 0;
 
@@ -243,6 +246,12 @@ function triggerSyzygy(a, b) {
   spawnTunnel(dir);
   lightStar(SPECTRAL[score % SPECTRAL.length]);
   audio.stingLock();
+  if (vfx) {
+    vfx.lockBurst(mid, SPECTRAL[(score) % SPECTRAL.length]);
+    vfx.startWarp(dir);
+  }
+  const fx = document.getElementById('fx');
+  if (fx) { fx.classList.remove('flash'); void fx.offsetWidth; fx.classList.add('flash'); }
 
   spectralSeq.push(a.userData.spectral);
   score += 1;
@@ -386,6 +395,8 @@ async function boot() {
 
   sunGlow = createSunGlow(AMBER);
   scene.add(sunGlow);
+
+  vfx = createVfx(scene, { amber: AMBER, cold: COLD });
 
   craft = await ASSET('./assets/cartographer_craft.js', { height: 0.7 });
   placeOnOrbit(craft, orbitTheta, orbitRadius, orbitInclination);
@@ -614,6 +625,29 @@ function frame(now) {
 
   if (spacefx) spacefx.update(dt, clockT);
 
+  // alignment heat 0..1 when two tethered
+  if (tethered.length === 2) {
+    const a = tethered[0].position;
+    const b = tethered[1].position;
+    const ang = unitFromSun(a).angleTo(unitFromSun(b));
+    const maxAng = (12 * Math.PI) / 180;
+    alignHeat = Math.max(0, 1 - ang / maxAng);
+    if (alignHeat > 0.75 && vfx && Math.random() < dt * 2) {
+      vfx.pulseAt(a.clone().add(b).multiplyScalar(0.5), COLD);
+    }
+  } else {
+    alignHeat = 0;
+  }
+
+  if (vfx) {
+    vfx.update(dt, {
+      craftPos: craft ? craft.position : null,
+      speed,
+      alignT: alignHeat,
+      sunScale,
+    });
+  }
+
   if (started && !over) {
     playElapsed += dt;
     const left = GAME_SECS - playElapsed;
@@ -694,6 +728,7 @@ function frame(now) {
     if (u >= 1) {
       const winAfter = travel.winAfter;
       travel = null;
+      if (vfx) vfx.stopWarp();
       if (winAfter) endWin();
       else if (!over) {
         state = tethered.length ? STATE.TETHER : STATE.ORBIT;
