@@ -1069,11 +1069,14 @@ function escapeHtml(s) {
 let botOn = false;
 function tickBot() {
   if (!botOn || !started || over || endingCinematic) return;
+  if (freezeFrames > 0) return;
   computeAlignment();
-  if (!bestTarget || bestTarget.kind === KIND.DEBRIS) return;
-  if (align >= goodBand(wave) * 0.98) doSnap();
-  // Use LOCK when ready
-  if (autoAlignUnlocked && autoAlignReady && autoAlignCd <= 0 && !autoAlignActive && align >= 0.55) {
+  if (!bestTarget) return;
+  // Never SNAP debris; wait for a scoring target
+  if (bestTarget.kind === KIND.DEBRIS) return;
+  // Snap when alignment is at least "good" (same band as green SNAP)
+  if (align >= goodBand(wave)) doSnap();
+  if (autoAlignUnlocked && autoAlignReady && autoAlignCd <= 0 && !autoAlignActive && align >= 0.6) {
     activateAutoAlign();
   }
 }
@@ -1137,6 +1140,7 @@ function frame(now) {
 
     tickAutoAlign(dt);
     computeAlignment();
+    tickBot();
 
     // Rising align tone feedback
     if (audio.setAlignTone) {
