@@ -5,14 +5,14 @@
 **Last updated:** 2026-09-12  
 **Current live build:** https://cyma-connection.github.io/syzygy/  
 **Source repo:** https://github.com/Cyma-Connection/syzygy  
-**Latest known commit family:** `d231978` (SNAP arcade + leaderboard harden)  
+**Latest known commit family:** ORBIT SNAP pivot (auto-orbit + multi-object SNAP)  
 **Jam:** [404 Game Jam](https://game.404.xyz/) — closes **25 Sep 2026, 23:59 UTC**
 
 ---
 
 ## 1. One-sentence pitch
 
-**SYZYGY SNAP** is a mobile-first Three.js arcade game: you aim a filament through a dying sun and **SNAP** when a sweeping relic aligns — timing + alignment, escalating waves, combos, lives, score, pinch-zoom.
+**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris), waves, combos, lives, LOCK auto-align, pinch-zoom.
 
 Fantasy skin: you are the last cartographer of a dead orrery (observatory of a dead future civilisation). Keep the fiction; the *feel* must stay arcade-addictive (Angry Birds clarity / Subway Surfers urgency), not contemplative simulation.
 
@@ -25,6 +25,29 @@ Fantasy skin: you are the last cartographer of a dead orrery (observatory of a d
 3. **Current ship — SYZYGY SNAP:** rebuilt around a single addictive verb: **SNAP** at the sweet spot of an alignment meter while relics sweep past the aim line.
 
 Do **not** revert to the contemplative tether loop unless explicitly asked. Alignment stays; pacing must stay arcade.
+
+---
+
+## 2b. ORBIT SNAP (current core — 2026-09-12)
+
+**Verb:** feel alignment on an auto-orbit, then SNAP.
+
+| Piece | Behavior |
+|---|---|
+| Auto-orbit | Craft angle advances continuously; `orbitSpeed` rises each wave (+ slight within-wave). Exposed as `__GAME__.speed`. |
+| World objects | Multiple on rings: **relic** (asset pool), **planet** (banded sphere), **star** (spiky cold), **debris** (jagged amber/bone — danger). |
+| Alignment | Best angular align craft↔object through sun origin; meter + SNAP pulse/glow + rising audio tone. |
+| SNAP | Debris → lose life + bad FX. Else Perfect/Good/OK × combo × wave; **stack bonus** if planet/star also near same ray. Weak/nothing → life loss. |
+| Wave clear | N successful non-debris snaps → wave++; **sun scale + emissive/brightness persist** for the run. |
+| LOCK (`#btnAutoAlign`) | Unlocks after 3 Perfect (heat). ~2.5s steer toward next good target / soft snap; charge/cooldown UI. Label LOCK/SYNC. |
+| Game over | Lives 0 → geometric shatter of craft + objects + **sun**, then OVER UI. |
+| Coach | 3 screens: ORBIT / FEEL ALIGN / SNAP (debris danger). Flag `syzygy_coach_v1`. |
+| Extras | Near-miss sparks, heat amber trail, boss every 5 waves (denser debris + big relic), Perfect slow-mo. |
+
+Primary files: `main.js`, `objects.js`, `audio.js`, `index.html`, `spacefx.js` (`growSun`), `vfx.js`.
+
+Do **not** revert to free-aim drag as primary control. Pinch zoom remains.
+
 
 ---
 
@@ -53,7 +76,9 @@ Always keep **two colour temperatures** in frame (amber + cold). No glyph/printe
 
 ---
 
-## 4. Current gameplay mechanics (authoritative)
+## 4. Legacy SNAP mechanics (superseded by §2b ORBIT SNAP — kept for history)
+
+> Authoritative loop is **§2b**. Below describes the previous free-aim SNAP build.
 
 ### 4.1 Player verbs
 

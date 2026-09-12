@@ -1,22 +1,25 @@
 /**
- * SYZYGY SNAP — arcade alignment for 404 Game Jam
+ * SYZYGY — ORBIT SNAP (404 Game Jam)
+ * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
 import { ASSET } from './assetlib.js';
 import { createSpaceAudio } from './audio.js';
-import { createSpaceBackdrop, createSunGlow } from './spacefx.js';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js';
 import { createVfx } from './vfx.js';
-import { loadLocal, saveLocal, fetchGlobal, submitGlobal } from './leaderboard.js';
+import { createPlanet, createStar, createDebris } from './objects.js';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
 const VOID = 0x04050a;
 const GOOD = 0x5ad67a;
+const BAD = 0xff4d6a;
 
-const STATE = { BOOT:'BOOT', PLAY:'PLAY', OVER:'OVER' };
+const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', OVER: 'OVER' };
+const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris' };
 
 let renderer, scene, camera, craft, sun, sunLight, sunGlow, spacefx, vfx;
-let raycaster;
 let audio = createSpaceAudio();
 let state = STATE.BOOT;
 let started = false;
@@ -33,32 +36,38 @@ let lastT = performance.now();
 let fps = 60;
 let clockT = 0;
 
-let aimTheta = 0.4;
-let targetTheta = 0.4;
-let targetSpeed = 0.55;
-let targetObj = null;
-let targetAlive = false;
-let targetLife = 0;
-let targetMaxLife = 4;
-let failing = false;
+/** Craft continuously orbits — primary angle driven by orbital speed */
+let craftTheta = 0;
+let orbitSpeed = 0.55; // rad/s — exposed via __GAME__.speed
+let orbitDir = 1;
+
+let world = []; // active objects on rings
+let align = 0;
+let bestTarget = null;
+let alignTone = 0;
+
+let zoom = 1;
+let camDist = 120;
 let freezeFrames = 0;
-let camPunch = 0; // seconds remaining of punch-back
+let slowMo = 0;
+let camPunch = 0;
 let camShake = 0;
 let perfectStreak = 0;
 let heatOn = false;
-let isBoss = false;
-let bossPhase = 0; // 0..2 for boss
-let bossHits = 0;
+let isBossWave = false;
+let sunScale = 1;
+let sunBaseScale = 1;
 
-let align = 0; // 0..1
-let zoom = 1; // pinch
-let camDist = 120;
+let autoAlignReady = false;
+let autoAlignActive = false;
+let autoAlignTimer = 0;
+let autoAlignCd = 0;
+let autoAlignUnlocked = false;
 
-let dragging = false;
-let lastPtr = null;
-let pointers = new Map(); // pinch
+let pointers = new Map();
 let pinchStartDist = 0;
 let pinchStartZoom = 1;
+let endingCinematic = false;
 
 const relicFiles = [
   ['./assets/hollow_moon.js', 6],
@@ -70,83 +79,102 @@ const relicFiles = [
 ];
 let relicPool = [];
 
-function $(id){ return document.getElementById(id); }
-function setText(id, t){ const el=$(id); if(el) el.textContent=t; }
+function $(id) { return document.getElementById(id); }
+function setText(id, t) { const el = $(id); if (el) el.textContent = t; }
 
-function place(obj, theta, r=78, y=0){
-  obj.position.set(Math.cos(theta)*r, y, Math.sin(theta)*r);
-  obj.lookAt(0,0,0);
+function angDiff(a, b) {
+  return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
 
-function waveParams(w){
+function place(obj, theta, r = 78, y = 0) {
+  obj.position.set(Math.cos(theta) * r, y, Math.sin(theta) * r);
+  obj.lookAt(0, 0, 0);
+}
+
+function waveParams(w) {
   return {
-    speed: 0.45 + w * 0.08,
-    window: Math.max(0.08, 0.28 - w * 0.015), // align threshold softness
+    baseSpeed: 0.48 + w * 0.07,
+    soft: Math.max(0.1, 0.32 - w * 0.012),
     perWave: 5,
-    decoyChance: Math.min(0.45, 0.05 * w),
+    maxObjects: Math.min(8, 3 + Math.floor(w / 2)),
+    debrisChance: Math.min(0.42, 0.08 + w * 0.035),
   };
 }
 
-function perfectBand(w){
-  return Math.max(0.92, 0.985 - w * 0.004);
-}
-function goodBand(w){
-  return Math.max(0.78, 0.92 - w * 0.008);
-}
+function perfectBand(w) { return Math.max(0.9, 0.98 - w * 0.005); }
+function goodBand(w) { return Math.max(0.72, 0.9 - w * 0.01); }
 
-function updateHud(){
+function updateHud() {
   const need = waveParams(wave).perWave;
   const left = Math.max(0, need - snapsInWave);
   setText('scoreBox', String(score));
   setText('waveBox', `WAVE ${wave}`);
-  setText('waveNext', left ? `NEXT ${left}` : 'BOSS?' );
-  const wn = $('waveNext');
-  if (wn) wn.textContent = `→ ${left} SNAP${left===1?'':'S'}`;
+  setText('waveNext', `→ ${left} SNAP${left === 1 ? '' : 'S'}`);
   setText('lives', '● '.repeat(lives).trim() || '○');
   const fill = $('meterFill');
   if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
   const btn = $('snapBtn');
   if (btn) {
-    const hot = align >= goodBand(wave);
-    const near = align >= 0.55 && !hot;
+    const hot = align >= goodBand(wave) && bestTarget && bestTarget.kind !== KIND.DEBRIS;
+    const danger = align >= 0.55 && bestTarget && bestTarget.kind === KIND.DEBRIS;
+    const near = align >= 0.5 && !hot && !danger;
     btn.classList.toggle('hot', hot);
     btn.classList.toggle('near', near);
-    // pulse faster as we approach sweet spot
-    const t = Math.max(0, Math.min(1, (align - 0.4) / 0.6));
-    const sec = 0.85 - t * 0.55; // 0.85s → 0.3s
-    btn.style.setProperty('--snap-pulse', `${sec.toFixed(2)}s`);
+    btn.classList.toggle('danger', danger);
+    const t = Math.max(0, Math.min(1, (align - 0.35) / 0.65));
+    btn.style.setProperty('--snap-pulse', `${(0.9 - t * 0.6).toFixed(2)}s`);
   }
   const heatEl = $('heatBadge');
   if (heatEl) heatEl.classList.toggle('on', heatOn);
+
+  const aa = $('btnAutoAlign');
+  if (aa) {
+    aa.classList.toggle('locked', !autoAlignUnlocked);
+    aa.classList.toggle('ready', autoAlignUnlocked && autoAlignReady && !autoAlignActive && autoAlignCd <= 0);
+    aa.classList.toggle('active', autoAlignActive);
+    aa.classList.toggle('cd', autoAlignCd > 0);
+    if (!autoAlignUnlocked) aa.textContent = 'LOCK';
+    else if (autoAlignActive) aa.textContent = 'SYNC';
+    else if (autoAlignCd > 0) aa.textContent = `${Math.ceil(autoAlignCd)}s`;
+    else aa.textContent = 'LOCK';
+    const charge = $('autoCharge');
+    if (charge) {
+      let pct = 0;
+      if (autoAlignActive) pct = (autoAlignTimer / 2.5) * 100;
+      else if (autoAlignCd > 0) pct = Math.max(0, 100 - (autoAlignCd / 8) * 100);
+      else if (autoAlignReady) pct = 100;
+      charge.style.width = `${pct}%`;
+    }
+  }
 }
 
-function flash(kind){
+function flash(kind) {
   const fx = $('fx');
   if (!fx) return;
-  fx.classList.remove('flash','miss','flashPerfect');
+  fx.classList.remove('flash', 'miss', 'flashPerfect');
   void fx.offsetWidth;
   fx.classList.add(kind === 'miss' ? 'miss' : kind === 'flashPerfect' ? 'flashPerfect' : 'flash');
 }
 
-function showCombo(label){
+function showCombo(label) {
   const el = $('combo');
   if (!el) return;
   el.textContent = label;
   el.classList.add('show');
   clearTimeout(showCombo._t);
-  showCombo._t = setTimeout(() => el.classList.remove('show'), 650);
+  showCombo._t = setTimeout(() => el.classList.remove('show'), 700);
 }
 
-function setHint(t){ setText('hint', t); }
+function setHint(t) { setText('hint', t); }
 
 const COACH_SCREENS = [
-  { title: 'DRAG', body: 'Glisse pour viser à travers le soleil.', visual: '⟶' },
-  { title: 'SNAP', body: 'Quand le bouton pulse au sweet spot — SNAP.', visual: '◎' },
-  { title: 'COMBO', body: 'PARFAIT = combo. RATE = une vie perdue.', visual: '♥ ♥ ♥' },
+  { title: 'ORBIT', body: 'Ton craft orbite seul. Observe les anneaux — le soleil au centre.', visual: '◎' },
+  { title: 'FEEL ALIGN', body: 'Sens l’alignement : bouton qui pulse, mètre qui monte, ton qui monte.', visual: '⟶◎' },
+  { title: 'SNAP', body: 'SNAP au sweet spot. Débris = danger. 3 PARFAIT → LOCK.', visual: '⚡' },
 ];
 let coachIdx = 0;
 
-function showStartOrCoach(){
+function showStartOrCoach() {
   const seen = localStorage.getItem('syzygy_coach_v1') === '1';
   if (seen) {
     $('coachFlow')?.classList.remove('on');
@@ -159,7 +187,7 @@ function showStartOrCoach(){
   $('coachFlow')?.classList.add('on');
 }
 
-function paintCoach(){
+function paintCoach() {
   const s = COACH_SCREENS[coachIdx];
   if (!s) return;
   setText('coachTitle', s.title);
@@ -167,7 +195,7 @@ function paintCoach(){
   setText('coachVisual', s.visual);
 }
 
-function advanceCoach(){
+function advanceCoach() {
   coachIdx += 1;
   if (coachIdx >= COACH_SCREENS.length) {
     localStorage.setItem('syzygy_coach_v1', '1');
@@ -178,10 +206,424 @@ function advanceCoach(){
   paintCoach();
 }
 
+function clearWorld() {
+  for (const o of world) {
+    scene.remove(o.mesh);
+    if (o.owned) {
+      o.mesh.traverse?.((n) => {
+        if (n.geometry) n.geometry.dispose?.();
+      });
+    } else {
+      o.mesh.visible = false;
+      o.mesh.scale.set(1, 1, 1);
+    }
+  }
+  world = [];
+}
 
-async function boot(){
+function pickKind(boss) {
+  if (boss) return KIND.RELIC;
+  const p = waveParams(wave);
+  const r = Math.random();
+  if (r < p.debrisChance) return KIND.DEBRIS;
+  if (r < p.debrisChance + 0.18) return KIND.PLANET;
+  if (r < p.debrisChance + 0.32) return KIND.STAR;
+  return KIND.RELIC;
+}
+
+function makeObject(kind, boss) {
+  let mesh;
+  let owned = true;
+  if (kind === KIND.RELIC) {
+    // Prefer an unused pool mesh; clone if all busy so multiple relics can coexist
+    const free = relicPool.filter((r) => !r.visible);
+    if (free.length) {
+      mesh = free[Math.floor(Math.random() * free.length)];
+      mesh.visible = true;
+      mesh.scale.setScalar(boss ? 2.6 : 1);
+      owned = false;
+    } else {
+      const src = relicPool[Math.floor(Math.random() * relicPool.length)];
+      mesh = src.clone(true);
+      mesh.visible = true;
+      mesh.scale.setScalar(boss ? 2.6 : 1);
+      owned = true;
+    }
+  } else if (kind === KIND.PLANET) {
+    mesh = createPlanet(boss ? 1.4 : 0.85 + Math.random() * 0.3);
+  } else if (kind === KIND.STAR) {
+    mesh = createStar(boss ? 1.3 : 0.75 + Math.random() * 0.25);
+  } else {
+    mesh = createDebris(0.9 + Math.random() * 0.4);
+  }
+  if (owned) scene.add(mesh);
+  return { kind, mesh, owned, theta: 0, radius: 70, y: 0, spin: 0.4 + Math.random() * 0.8 };
+}
+
+function spawnWaveField() {
+  clearWorld();
+  const p = waveParams(wave);
+  isBossWave = wave > 0 && wave % 5 === 0;
+  const count = isBossWave ? Math.min(10, p.maxObjects + 3) : p.maxObjects;
+  const usedAngles = [];
+
+  // Boss: one big relic + denser debris
+  if (isBossWave) {
+    const boss = makeObject(KIND.RELIC, true);
+    boss.theta = craftTheta + Math.PI * 0.85;
+    boss.radius = 92;
+    boss.y = 0;
+    place(boss.mesh, boss.theta, boss.radius, boss.y);
+    world.push(boss);
+    usedAngles.push(boss.theta);
+    setHint('BOSS — dense debris · big relic');
+    showCombo('BOSS');
+    audio.setTension?.(1);
+  }
+
+  for (let i = world.length; i < count; i++) {
+    const kind = isBossWave && Math.random() < 0.55 ? KIND.DEBRIS : pickKind(false);
+    const o = makeObject(kind, false);
+    let theta;
+    let tries = 0;
+    do {
+      theta = craftTheta + (0.4 + Math.random() * (Math.PI * 1.6)) * (Math.random() < 0.5 ? 1 : -1);
+      tries++;
+    } while (tries < 12 && usedAngles.some((a) => angDiff(a, theta) < 0.35));
+    usedAngles.push(theta);
+    o.theta = theta;
+    o.radius = 58 + Math.random() * 45 + (kind === KIND.DEBRIS ? Math.random() * 10 : 0);
+    o.y = (Math.random() - 0.5) * 10;
+    place(o.mesh, o.theta, o.radius, o.y);
+    world.push(o);
+  }
+  if (!isBossWave) setHint(wave === 1 ? 'Sens l’alignement · SNAP' : 'ALIGN & SNAP');
+}
+
+function refillObject() {
+  if (world.length >= waveParams(wave).maxObjects + (isBossWave ? 3 : 0)) return;
+  const kind = isBossWave && Math.random() < 0.5 ? KIND.DEBRIS : pickKind(false);
+  const o = makeObject(kind, false);
+  o.theta = craftTheta + Math.PI * (0.7 + Math.random() * 0.6) * (Math.random() < 0.5 ? 1 : -1);
+  o.radius = 60 + Math.random() * 48;
+  o.y = (Math.random() - 0.5) * 10;
+  place(o.mesh, o.theta, o.radius, o.y);
+  world.push(o);
+}
+
+function removeObject(o) {
+  const i = world.indexOf(o);
+  if (i >= 0) world.splice(i, 1);
+  if (o.owned) {
+    scene.remove(o.mesh);
+  } else {
+    o.mesh.visible = false;
+    o.mesh.scale.set(1, 1, 1);
+  }
+}
+
+function computeAlignment() {
+  bestTarget = null;
+  let best = 0;
+  const soft = waveParams(wave).soft + 0.22;
+  for (const o of world) {
+    const d = angDiff(craftTheta, o.theta);
+    const q = Math.max(0, 1 - d / soft);
+    if (q > best) {
+      best = q;
+      bestTarget = o;
+    }
+  }
+  align = best;
+  return best;
+}
+
+/** Stack bonus: other non-debris near the same sun→craft ray */
+function stackBonus(primary) {
+  let bonus = 1;
+  const tags = [];
+  for (const o of world) {
+    if (o === primary || o.kind === KIND.DEBRIS) continue;
+    if (angDiff(craftTheta, o.theta) < 0.18) {
+      if (o.kind === KIND.PLANET) { bonus += 0.5; tags.push('PLANET'); }
+      if (o.kind === KIND.STAR) { bonus += 0.75; tags.push('STAR'); }
+      if (o.kind === KIND.RELIC) { bonus += 0.35; tags.push('RELIC'); }
+    }
+  }
+  return { bonus, tags };
+}
+
+function failLife(reason) {
+  if (over || endingCinematic) return;
+  lives -= 1;
+  combo = 0;
+  perfectStreak = 0;
+  heatOn = false;
+  updateHeatVisual();
+  audio.stingMiss();
+  flash('miss');
+  camShake = 0.4;
+  setHint(reason || 'MISS');
+  updateHud();
+  if (lives <= 0) endRun();
+}
+
+function doSnap() {
+  if (!started || over || state !== STATE.PLAY || endingCinematic) return;
+  if (freezeFrames > 0) return;
+
+  computeAlignment();
+  const perf = perfectBand(wave);
+  const good = goodBand(wave);
+  const target = bestTarget;
+
+  if (!target || align < 0.45) {
+    failLife(align < 0.2 ? 'RIEN ALIGNÉ' : 'TROP FAIBLE');
+    return;
+  }
+
+  if (target.kind === KIND.DEBRIS) {
+    // distinct bad FX
+    audio.stingDebris?.() || audio.stingMiss();
+    flash('miss');
+    camShake = 0.55;
+    if (vfx) {
+      vfx.shatterAt(target.mesh.position.clone(), BAD, 16, 1.1);
+      vfx.lockBurst(target.mesh.position.clone(), BAD);
+    }
+    removeObject(target);
+    refillObject();
+    failLife('DÉBRIS!');
+    return;
+  }
+
+  let grade = 'OK';
+  let pts = 200;
+  if (align >= perf) { grade = 'PERFECT'; pts = 1000; combo += 1; perfectStreak += 1; }
+  else if (align >= good) { grade = 'GOOD'; pts = 500; combo += 1; perfectStreak = 0; }
+  else { grade = 'OK'; pts = 200; combo = 0; perfectStreak = 0; }
+
+  updateHeat();
+  const { bonus, tags } = stackBonus(target);
+  const heatMult = heatOn ? 2 : 1;
+  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.08) * heatMult * bonus);
+  score += gained;
+  bestCombo = Math.max(bestCombo, combo);
+  snapsInWave += 1;
+
+  if (grade === 'PERFECT') audio.stingPerfect?.() || audio.stingLock();
+  else audio.stingLock();
+
+  const pos = target.mesh.position.clone();
+  if (grade === 'PERFECT') {
+    freezeFrames = 2;
+    slowMo = 0.35;
+    flash('flashPerfect');
+    camPunch = 0.32;
+    if (vfx) vfx.shatterAt(pos, GOOD, 24, 1.2);
+  } else {
+    flash('flash');
+    camPunch = 0.18;
+    if (vfx) vfx.shatterAt(pos, AMBER, 12, 0.9);
+  }
+  if (vfx) {
+    vfx.lockBurst(pos, grade === 'PERFECT' ? GOOD : AMBER);
+    vfx.pulseAt(new THREE.Vector3(), COLD);
+  }
+
+  const stackLabel = tags.length ? ` +${tags.join('+')}` : '';
+  showCombo(`${grade}${combo > 1 ? ` x${combo}` : ''}${heatOn ? ' HEAT' : ''}${stackLabel}`);
+  setHint(`+${gained}`);
+
+  // Consume primary; also consume stacked allies on the ray for juice
+  const toRemove = [target];
+  for (const o of world) {
+    if (o === target || o.kind === KIND.DEBRIS) continue;
+    if (angDiff(craftTheta, o.theta) < 0.18) toRemove.push(o);
+  }
+  for (const o of toRemove) removeObject(o);
+  for (let i = 0; i < toRemove.length; i++) refillObject();
+
+  updateHud();
+  maybeAdvanceWave();
+}
+
+function updateHeat() {
+  if (perfectStreak >= 3) {
+    if (!heatOn) showCombo('HEAT x2');
+    heatOn = true;
+    if (!autoAlignUnlocked) {
+      autoAlignUnlocked = true;
+      autoAlignReady = true;
+      showCombo('LOCK DÉBLOQUÉ');
+      setHint('LOCK prêt — sync 2.5s');
+    } else if (autoAlignCd <= 0) {
+      autoAlignReady = true;
+    }
+  } else {
+    heatOn = false;
+  }
+  updateHeatVisual();
+}
+
+function updateHeatVisual() {
+  if (!craft) return;
+  craft.traverse((n) => {
+    if (n.isMesh && n.material && n.material.emissive) {
+      n.material.emissive = new THREE.Color(heatOn ? AMBER : 0x000000);
+      n.material.emissiveIntensity = heatOn ? 0.55 : 0;
+    }
+  });
+}
+
+function maybeAdvanceWave() {
+  const need = waveParams(wave).perWave;
+  if (snapsInWave >= need) {
+    wave += 1;
+    snapsInWave = 0;
+    // sun grows + brightens for the run
+    sunScale = Math.min(2.4, sunScale + 0.12);
+    applySunGrowth();
+    orbitSpeed = waveParams(wave).baseSpeed;
+    audio.stingWave?.();
+    audio.setWaveLayer?.(wave);
+    setHint(`WAVE ${wave}`);
+    showCombo(`WAVE ${wave}`);
+    spawnWaveField();
+  }
+}
+
+function applySunGrowth() {
+  if (sun) sun.scale.setScalar(sunBaseScale * sunScale);
+  if (sunGlow) {
+    growSun?.(sunGlow, sunScale);
+    sunGlow.scale.setScalar(sunScale);
+  }
+  if (sunLight) {
+    sunLight.intensity = 2.8 + (sunScale - 1) * 2.2;
+    sunLight.distance = 560 + (sunScale - 1) * 120;
+  }
+}
+
+function activateAutoAlign() {
+  if (!started || over || !autoAlignUnlocked || !autoAlignReady || autoAlignActive || autoAlignCd > 0) return;
+  autoAlignActive = true;
+  autoAlignReady = false;
+  autoAlignTimer = 2.5;
+  audio.stingAutoAlign?.();
+  showCombo('LOCK');
+  setHint('SYNC — alignement assisté');
+  updateHud();
+}
+
+function tickAutoAlign(dt) {
+  if (autoAlignCd > 0) {
+    autoAlignCd = Math.max(0, autoAlignCd - dt);
+    if (autoAlignCd <= 0) autoAlignReady = autoAlignUnlocked;
+  }
+  if (!autoAlignActive) return;
+
+  autoAlignTimer -= dt;
+  // Steer toward nearest good (non-debris) alignment
+  let best = null;
+  let bestD = 99;
+  for (const o of world) {
+    if (o.kind === KIND.DEBRIS) continue;
+    const d = angDiff(craftTheta, o.theta);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  if (best && bestD > 0.02) {
+    const delta = Math.atan2(Math.sin(best.theta - craftTheta), Math.cos(best.theta - craftTheta));
+    craftTheta += Math.sign(delta) * Math.min(Math.abs(delta), 1.8 * dt);
+  }
+  // Soft auto-snap once when close enough
+  if (best && bestD < 0.08 && align >= goodBand(wave) * 0.92) {
+    autoAlignActive = false;
+    autoAlignCd = 8;
+    doSnap();
+    return;
+  }
+  if (autoAlignTimer <= 0) {
+    autoAlignActive = false;
+    autoAlignCd = 8;
+    // soft opportunity: if decent align, score OK
+    computeAlignment();
+    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.6) {
+      doSnap();
+    } else {
+      setHint('LOCK fini');
+    }
+  }
+}
+
+function startRun() {
+  if (started && !over && state === STATE.PLAY) return;
+  score = 0; wave = 1; lives = 3; combo = 0; bestCombo = 0; snapsInWave = 0;
+  perfectStreak = 0; heatOn = false;
+  playElapsed = 0; over = false; started = true; state = STATE.PLAY;
+  endingCinematic = false;
+  zoom = 1; camDist = 120;
+  craftTheta = 0.4;
+  orbitSpeed = waveParams(1).baseSpeed;
+  orbitDir = 1;
+  sunScale = 1;
+  applySunGrowth();
+  autoAlignUnlocked = false;
+  autoAlignReady = false;
+  autoAlignActive = false;
+  autoAlignTimer = 0;
+  autoAlignCd = 0;
+  slowMo = 0;
+  updateHeatVisual();
+  $('start')?.classList.remove('on');
+  $('board')?.classList.remove('on');
+  $('over')?.classList.remove('on');
+  $('hud')?.classList.add('on');
+  updateHud();
+  audio.start();
+  spawnWaveField();
+}
+
+function endRun() {
+  if (endingCinematic) return;
+  endingCinematic = true;
+  over = true;
+  state = STATE.OVER;
+  $('hud')?.classList.remove('on');
+  // cinematic geometric shatter: craft + objects + sun
+  audio.stingExplosion?.();
+  camShake = 0.9;
+  camPunch = 0.5;
+  flash('miss');
+  if (vfx && craft) {
+    vfx.shatterAt(craft.position.clone(), AMBER, 28, 1.4);
+    vfx.lockBurst(craft.position.clone(), BAD);
+  }
+  for (const o of [...world]) {
+    if (vfx) vfx.shatterAt(o.mesh.position.clone(), o.kind === KIND.DEBRIS ? BAD : COLD, 10, 1);
+    removeObject(o);
+  }
+  if (sun && vfx) {
+    vfx.shatterAt(new THREE.Vector3(0, 0, 0), AMBER, 36, 1.6);
+    vfx.pulseAt(new THREE.Vector3(), AMBER);
+    vfx.lockBurst(new THREE.Vector3(2, 0, 0), AMBER);
+  }
+  // brief delay then OVER UI
+  setTimeout(() => {
+    $('over')?.classList.add('on');
+    setText('overSub', `Score ${score} · Wave ${wave} · Best combo x${bestCombo}`);
+    const nameIn = $('nameIn');
+    if (nameIn) {
+      if (!nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0, 12);
+      setTimeout(() => nameIn.focus(), 50);
+    }
+    publishGame();
+  }, 700);
+}
+
+async function boot() {
   const canvas = $('c');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -192,43 +634,45 @@ async function boot(){
   scene.background = new THREE.Color(VOID);
   scene.fog = new THREE.FogExp2(0x060814, 0.0014);
 
-  camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.5, 1000);
+  camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 1000);
   camera.position.set(0, 40, camDist);
 
-  raycaster = new THREE.Raycaster();
-  spacefx = createSpaceBackdrop(scene, { amber:AMBER, cold:COLD });
+  spacefx = createSpaceBackdrop(scene, { amber: AMBER, cold: COLD });
   scene.add(new THREE.HemisphereLight(COLD, AMBER, 0.5));
   sunLight = new THREE.PointLight(AMBER, 3.4, 560);
   scene.add(sunLight);
   scene.add(new THREE.DirectionalLight(COLD, 0.8));
 
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(40, 160, 96),
-    new THREE.MeshBasicMaterial({ color:0x152238, transparent:true, opacity:0.2, side:THREE.DoubleSide, depthWrite:false })
-  );
-  ring.rotation.x = -Math.PI/2;
-  scene.add(ring);
+  // orbit guide rings
+  for (const [r, op] of [[55, 0.12], [80, 0.18], [110, 0.1]]) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r - 0.4, r + 0.4, 96),
+      new THREE.MeshBasicMaterial({ color: 0x152238, transparent: true, opacity: op, side: THREE.DoubleSide, depthWrite: false })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    scene.add(ring);
+  }
 
-  // Aim guide line (sun → aim)
-  const aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(80,0,0)]);
-  const aimLine = new THREE.Line(aimGeo, new THREE.LineBasicMaterial({ color:AMBER, transparent:true, opacity:0.35 }));
+  const aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(80, 0, 0)]);
+  const aimLine = new THREE.Line(aimGeo, new THREE.LineBasicMaterial({ color: AMBER, transparent: true, opacity: 0.4 }));
   aimLine.name = 'aimLine';
   scene.add(aimLine);
   window.__aimLine = aimLine;
 
-  sun = await ASSET('./assets/dying_sun.js', { height:40 });
+  sun = await ASSET('./assets/dying_sun.js', { height: 40 });
   sun.userData.isSun = true;
+  sunBaseScale = 1;
   scene.add(sun);
   sunGlow = createSunGlow(AMBER);
   scene.add(sunGlow);
-  vfx = createVfx(scene, { amber:AMBER, cold:COLD });
+  vfx = createVfx(scene, { amber: AMBER, cold: COLD });
 
-  craft = await ASSET('./assets/cartographer_craft.js', { height:0.7 });
-  place(craft, aimTheta, 95);
+  craft = await ASSET('./assets/cartographer_craft.js', { height: 0.7 });
+  place(craft, craftTheta, 95);
   scene.add(craft);
 
-  for (const [file,h] of relicFiles) {
-    const r = await ASSET(file, { height:h });
+  for (const [file, h] of relicFiles) {
+    const r = await ASSET(file, { height: h });
     r.visible = false;
     scene.add(r);
     relicPool.push(r);
@@ -243,291 +687,72 @@ async function boot(){
 
   $('load')?.classList.add('gone');
   showStartOrCoach();
-  $('btnCoachNext')?.addEventListener('click', (e)=>{ e.preventDefault(); advanceCoach(); });
+  $('btnCoachNext')?.addEventListener('click', (e) => { e.preventDefault(); advanceCoach(); });
   requestAnimationFrame(frame);
 }
 
-function spawnTarget(){
-  const p = waveParams(wave);
-  // Boss every 5 waves, as first snap of that wave
-  isBoss = (wave > 0 && wave % 5 === 0 && snapsInWave === 0);
-  bossHits = 0;
-  bossPhase = 0;
-  targetObj = relicPool[Math.floor(Math.random()*relicPool.length)];
-  targetObj.visible = true;
-  targetObj.scale.setScalar(isBoss ? 3 : 1);
-  const side = Math.random() < 0.5 ? 1 : -1;
-  targetTheta = aimTheta + side * (0.9 + Math.random()*0.7);
-  targetSpeed = (isBoss ? p.speed * 0.35 : p.speed) * side * -1;
-  failing = false;
-  targetAlive = true;
-  targetMaxLife = isBoss
-    ? Math.max(3.5, 6.5 - wave * 0.1)
-    : Math.max(1.6, 4.2 - wave * 0.18);
-  targetLife = targetMaxLife;
-  place(targetObj, targetTheta, 70 + Math.random()*25, (Math.random()-0.5)*8);
-  if (isBoss) {
-    setHint('BOSS RELIC — 3 SNAPS');
-    showCombo('BOSS');
-    audio.setTension?.(1);
-  } else {
-    setHint(wave === 1 && snapsInWave === 0 ? 'Drag to aim · SNAP in the sweet spot' : 'ALIGN & SNAP');
-  }
-}
-
-function failLife(reason){
-  if (failing || over || !targetAlive) return;
-  failing = true;
-  lives -= 1;
-  combo = 0;
-  perfectStreak = 0;
-  heatOn = false;
-  const isTimeout = reason === 'TOO LATE';
-  if (isTimeout && audio.stingTimeout) audio.stingTimeout();
-  else audio.stingMiss();
-  flash('miss');
-  camShake = isTimeout ? 0.28 : 0.4;
-  setHint(reason || 'MISS');
-  updateHud();
-  if (targetObj) { targetObj.visible = false; targetObj.scale.set(1,1,1); }
-  targetAlive = false;
-  isBoss = false;
-  if (lives <= 0) endRun();
-  else setTimeout(() => { failing = false; spawnTarget(); }, 500);
-}
-
-function doSnap(){
-  if (!started || over || state !== STATE.PLAY || !targetAlive) return;
-  if (freezeFrames > 0) return;
-  const perf = perfectBand(wave);
-  const good = goodBand(wave);
-  let grade = 'MISS';
-  let pts = 0;
-
-  // Boss: only the sweet-spot phase scores full; others partial
-  if (isBoss) {
-    bossHits += 1;
-    if (align >= good) {
-      grade = align >= perf ? 'PERFECT' : 'GOOD';
-      pts = align >= perf ? 1000 : 500;
-      if (align >= perf) { combo += 1; perfectStreak += 1; }
-      else { perfectStreak = 0; }
-    } else {
-      grade = 'PARTIAL';
-      pts = 100;
-      perfectStreak = 0;
-    }
-    const heatMult = heatOn ? 2 : 1;
-    const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave-1)*0.08) * heatMult);
-    score += gained;
-    bestCombo = Math.max(bestCombo, combo);
-    audio.stingLock();
-    if (vfx && targetObj) {
-      vfx.shatterAt(targetObj.position.clone(), grade === 'PERFECT' ? GOOD : AMBER, grade === 'PARTIAL' ? 8 : 14, isBoss ? 0.65 : 1);
-      vfx.lockBurst(targetObj.position.clone(), AMBER);
-    }
-    flash(grade === 'PERFECT' ? 'flashPerfect' : 'flash');
-    camPunch = 0.3;
-    showCombo(`${grade} +${gained}`);
-    setHint(`BOSS ${bossHits}/3`);
-    if (bossHits >= 3) {
-      snapsInWave += 1;
-      targetObj.visible = false;
-      targetObj.scale.set(1,1,1);
-      targetAlive = false;
-      isBoss = false;
-      maybeAdvanceWave();
-      setTimeout(spawnTarget, 550);
-    } else {
-      // next boss phase: nudge angle and refresh life
-      targetTheta += (Math.random() < 0.5 ? 1 : -1) * 0.55;
-      targetLife = targetMaxLife;
-      bossPhase = bossHits;
-    }
-    updateHud();
-    updateHeat();
-    return;
-  }
-
-  if (align >= perf) { grade = 'PERFECT'; pts = 1000; combo += 1; perfectStreak += 1; }
-  else if (align >= good) { grade = 'GOOD'; pts = 500; combo += 1; perfectStreak = 0; }
-  else if (align >= 0.55) { grade = 'OK'; pts = 200; combo = 0; perfectStreak = 0; }
-  else {
-    failLife('TOO EARLY / OFF');
-    return;
-  }
-
-  updateHeat();
-  const heatMult = heatOn ? 2 : 1;
-  const mult = Math.max(1, combo);
-  const gained = Math.floor(pts * mult * (1 + (wave-1)*0.08) * heatMult);
-  score += gained;
-  bestCombo = Math.max(bestCombo, combo);
-  snapsInWave += 1;
-
-  audio.stingLock();
-  const pos = targetObj.position.clone();
-  if (grade === 'PERFECT') {
-    freezeFrames = 3;
-    flash('flashPerfect');
-    camPunch = 0.3;
-    if (vfx) vfx.shatterAt(pos, GOOD, 22, 1.15);
-  } else {
-    flash('flash');
-    camPunch = 0.18;
-    if (vfx) vfx.shatterAt(pos, AMBER, 12, 0.9);
-  }
-  if (vfx) {
-    vfx.lockBurst(pos, grade === 'PERFECT' ? GOOD : AMBER);
-    vfx.pulseAt(new THREE.Vector3(), COLD);
-  }
-  showCombo(`${grade}${combo>1?` x${combo}`:''}${heatOn?' HEAT':''}`);
-  setHint(`+${gained}`);
-
-  targetObj.visible = false;
-  targetObj.scale.set(1,1,1);
-  targetAlive = false;
-  updateHud();
-  maybeAdvanceWave();
-  setTimeout(spawnTarget, grade === 'PERFECT' ? 480 : 400);
-}
-
-function updateHeat(){
-  if (perfectStreak >= 3) {
-    if (!heatOn) showCombo('HEAT x2');
-    heatOn = true;
-  } else {
-    heatOn = false;
-  }
-  if (craft) {
-    craft.traverse((n) => {
-      if (n.isMesh && n.material && n.material.emissive) {
-        n.material.emissive = new THREE.Color(heatOn ? AMBER : 0x000000);
-        n.material.emissiveIntensity = heatOn ? 0.55 : 0;
-      }
-    });
-  }
-}
-
-function maybeAdvanceWave(){
-  const need = waveParams(wave).perWave;
-  if (snapsInWave >= need) {
-    wave += 1;
-    snapsInWave = 0;
-    setHint(`WAVE ${wave}`);
-    showCombo(`WAVE ${wave}`);
-  }
-}
-
-function startRun(){
-  if (started && !over && state === STATE.PLAY) return;
-  score = 0; wave = 1; lives = 3; combo = 0; bestCombo = 0; snapsInWave = 0; perfectStreak = 0; heatOn = false;
-  playElapsed = 0; over = false; started = true; state = STATE.PLAY;
-  zoom = 1; camDist = 120;
-  $('start')?.classList.remove('on');
-  $('board')?.classList.remove('on');
-  $('over')?.classList.remove('on');
-  $('hud')?.classList.add('on');
-  updateHud();
-  audio.start();
-  spawnTarget();
-}
-
-function endRun(){
-  over = true;
-  state = STATE.OVER;
-  $('hud')?.classList.remove('on');
-  $('over')?.classList.add('on');
-  setText('overSub', `Score ${score} · Wave ${wave} · Best combo x${bestCombo}`);
-  const nameIn = $('nameIn');
-  if (nameIn) {
-    if (!nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0,12);
-    setTimeout(() => nameIn.focus(), 50);
-  }
-  publishGame();
-}
-
-function onResize(){
-  if (!renderer||!camera) return;
-  camera.aspect = innerWidth/innerHeight;
+function onResize() {
+  if (!renderer || !camera) return;
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
 }
 
-function ptrPos(e, id){
-  if (e.touches) {
-    for (const t of e.touches) if (t.identifier === id) return {x:t.clientX,y:t.clientY};
-  }
-  return {x:e.clientX, y:e.clientY};
-}
-
-function bindInput(canvas){
+function bindInput(canvas) {
   const down = (e) => {
     e.preventDefault();
     if (e.pointerId != null) {
-      pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
-      try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
     }
     if (pointers.size === 2) {
       const pts = [...pointers.values()];
-      pinchStartDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       pinchStartZoom = zoom;
-      dragging = false;
-      return;
     }
-    if (!started || over) return;
-    dragging = true;
-    lastPtr = {x:e.clientX,y:e.clientY};
   };
   const move = (e) => {
     e.preventDefault();
     if (e.pointerId != null && pointers.has(e.pointerId)) {
-      pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
     if (pointers.size === 2) {
       const pts = [...pointers.values()];
-      const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       if (pinchStartDist > 0) {
         zoom = THREE.MathUtils.clamp(pinchStartZoom * (pinchStartDist / d), 0.55, 1.85);
         camDist = 70 + zoom * 70;
       }
-      return;
     }
-    if (!dragging || !started || over) return;
-    const dx = e.clientX - lastPtr.x;
-    lastPtr = {x:e.clientX,y:e.clientY};
-    aimTheta += dx * 0.0055;
   };
   const up = (e) => {
     if (e.pointerId != null) pointers.delete(e.pointerId);
     if (pointers.size < 2) pinchStartDist = 0;
-    dragging = false;
   };
 
-  canvas.addEventListener('pointerdown', down, {passive:false});
-  window.addEventListener('pointermove', move, {passive:false});
+  canvas.addEventListener('pointerdown', down, { passive: false });
+  window.addEventListener('pointermove', move, { passive: false });
   window.addEventListener('pointerup', up);
   window.addEventListener('pointercancel', up);
+  canvas.addEventListener('touchstart', (e) => { e.preventDefault(); }, { passive: false });
 
-  // touch fallback pinch via touches
-  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); }, {passive:false});
-
-  $('snapBtn')?.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); doSnap(); });
+  $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
+  $('btnAutoAlign')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); });
   $('btnMute')?.addEventListener('click', (e) => {
     e.preventDefault();
     const m = audio.toggleMute();
     const b = $('btnMute');
     if (b) { b.classList.toggle('off', m); b.textContent = m ? 'Mute' : '♪'; }
   });
-  $('btnStart')?.addEventListener('click', ()=> startRun());
-  $('btnRetry')?.addEventListener('click', ()=> startRun());
-  $('btnLb')?.addEventListener('click', ()=> openBoard());
-  $('btnBack')?.addEventListener('click', ()=>{
+  $('btnStart')?.addEventListener('click', () => startRun());
+  $('btnRetry')?.addEventListener('click', () => startRun());
+  $('btnLb')?.addEventListener('click', () => openBoard());
+  $('btnBack')?.addEventListener('click', () => {
     $('board')?.classList.remove('on');
     $('start')?.classList.add('on');
   });
-  $('btnSubmit')?.addEventListener('click', async ()=>{
-    const name = ($('nameIn')?.value || 'ANON').trim().slice(0,12) || 'ANON';
+  $('btnSubmit')?.addEventListener('click', async () => {
+    const name = ($('nameIn')?.value || 'ANON').trim().slice(0, 12) || 'ANON';
     localStorage.setItem('syzygy_tag', name);
     saveLocal(name, score, wave);
     $('btnSubmit').textContent = 'SAVING…';
@@ -541,7 +766,7 @@ function bindInput(canvas){
   });
 }
 
-function openBoard(){
+function openBoard() {
   $('start')?.classList.remove('on');
   $('board')?.classList.add('on');
   const note = $('lbNote');
@@ -549,36 +774,42 @@ function openBoard(){
   renderBoard(loadLocal());
 }
 
-function renderBoard(rows){
+function renderBoard(rows) {
   const lb = $('lb');
   if (!lb) return;
   if (!rows.length) { lb.innerHTML = '<em>Aucun score encore — joue une run</em>'; return; }
-  lb.innerHTML = `<table>${rows.slice(0,15).map((r,i)=>
-    `<tr><td>${i+1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
+  lb.innerHTML = `<table>${rows.slice(0, 15).map((r, i) =>
+    `<tr><td>${i + 1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
   ).join('')}</table>`;
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function publishGame(){
-  const info = renderer ? renderer.info.render : {calls:0,triangles:0};
+function publishGame() {
+  const info = renderer ? renderer.info.render : { calls: 0, triangles: 0 };
   window.__GAME__ = {
-    pos: craft ? [craft.position.x, craft.position.z] : [0,0],
-    fps, speed: Math.abs(targetSpeed)*40, score, over,
-    draws: info.calls, tris: info.triangles, state, wave, lives,
+    pos: craft ? [craft.position.x, craft.position.z] : [0, 0],
+    fps,
+    speed: Math.abs(orbitSpeed) * 40,
+    score,
+    over,
+    draws: info.calls,
+    tris: info.triangles,
+    state,
+    wave,
+    lives,
   };
 }
 
-function frame(now){
-  const raw = (now-lastT)/1000;
-  fps = 1/(raw||0.016);
+function frame(now) {
+  const raw = (now - lastT) / 1000;
+  fps = 1 / (raw || 0.016);
   let dt = Math.min(0.05, Math.max(0.001, raw));
   lastT = now;
   clockT += dt;
 
-  // Perfect SNAP freeze: hold 3 frames
   if (freezeFrames > 0) {
     freezeFrames -= 1;
     renderer.render(scene, camera);
@@ -587,81 +818,105 @@ function frame(now){
     return;
   }
 
+  // brief slow-mo on Perfect
+  if (slowMo > 0) {
+    slowMo = Math.max(0, slowMo - raw);
+    dt *= 0.35;
+  }
+
   if (spacefx) spacefx.update(dt, clockT);
 
   if (started && !over) {
-    playElapsed += dt;
-    audio.setTension(Math.min(1, wave/12));
+    playElapsed += raw;
+    audio.setTension(Math.min(1, wave / 12));
     audio.setWaveLayer?.(wave);
+    audio.setOrbitSpeed?.(orbitSpeed);
 
-    if (targetAlive && targetObj) {
-      targetTheta += targetSpeed * dt;
-      const r = isBoss ? 88 : 78;
-      place(targetObj, targetTheta, r, targetObj.position.y);
-      if (isBoss) targetObj.scale.setScalar(3);
-      targetLife -= dt;
-      if (targetLife <= 0) failLife('TOO LATE');
+    // Auto-orbit — speed rises slightly within wave
+    const within = snapsInWave / Math.max(1, waveParams(wave).perWave);
+    const spd = orbitSpeed * (1 + within * 0.12);
+    craftTheta += orbitDir * spd * dt;
+
+    tickAutoAlign(dt);
+    computeAlignment();
+
+    // Rising align tone feedback
+    if (audio.setAlignTone) {
+      const want = (align >= 0.45 && bestTarget && bestTarget.kind !== KIND.DEBRIS) ? align : 0;
+      audio.setAlignTone(want);
     }
 
-    if (targetAlive) {
-      let d = Math.abs(Math.atan2(Math.sin(targetTheta-aimTheta), Math.cos(targetTheta-aimTheta)));
-      const soft = waveParams(wave).window + 0.25;
-      align = Math.max(0, 1 - d / soft);
-      // near-miss sparks band
-      if (align >= 0.45 && align < 0.55 && vfx && targetObj && Math.random() < dt * 14) {
-        vfx.nearMissBurst(targetObj.position);
-      }
-    } else {
-      align = 0;
+    // Near-miss sparks for relics approaching sweet spot
+    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.42 && align < 0.55 && vfx && Math.random() < dt * 16) {
+      vfx.nearMissBurst(bestTarget.mesh.position);
     }
+
+    // Spin decorative objects
+    for (const o of world) {
+      o.mesh.rotation.y += o.spin * dt;
+      if (o.kind === KIND.STAR) o.mesh.rotation.z += o.spin * 0.7 * dt;
+      if (o.kind === KIND.DEBRIS) o.mesh.rotation.x += o.spin * 1.2 * dt;
+    }
+
     updateHud();
   }
 
-  place(craft, aimTheta, 95);
+  place(craft, craftTheta, 95);
 
   const aimLine = window.__aimLine;
   if (aimLine) {
-    const end = new THREE.Vector3(Math.cos(aimTheta)*160, 0, Math.sin(aimTheta)*160);
-    aimLine.geometry.setFromPoints([new THREE.Vector3(0,0,0), end]);
+    const end = new THREE.Vector3(Math.cos(craftTheta) * 160, 0, Math.sin(craftTheta) * 160);
+    aimLine.geometry.setFromPoints([new THREE.Vector3(0, 0, 0), end]);
+    // glow stronger when hot
+    aimLine.material.opacity = 0.28 + align * 0.45;
+    aimLine.material.color.setHex(
+      bestTarget?.kind === KIND.DEBRIS && align > 0.5 ? BAD : align > 0.7 ? GOOD : AMBER
+    );
   }
 
-  if (vfx) vfx.update(dt, { craftPos: craft?.position, speed: Math.abs(targetSpeed)*50, alignT: align, sunScale:1 });
+  if (vfx) {
+    vfx.update(dt, {
+      craftPos: craft?.position,
+      speed: Math.abs(orbitSpeed) * 50,
+      alignT: align,
+      sunScale,
+      heat: heatOn,
+    });
+  }
 
   if (camera) {
-    const target = new THREE.Vector3(Math.cos(aimTheta)*40, 18, Math.sin(aimTheta)*40);
+    const target = new THREE.Vector3(Math.cos(craftTheta) * 40, 18, Math.sin(craftTheta) * 40);
     let dist = camDist;
-    // punch: breathe out then back in 0.3s
     if (camPunch > 0) {
       camPunch = Math.max(0, camPunch - dt);
       const u = 1 - camPunch / 0.3;
-      const punch = Math.sin(u * Math.PI) * 14;
-      dist += punch;
+      dist += Math.sin(u * Math.PI) * 14;
     }
     const camGoal = new THREE.Vector3(
-      Math.cos(aimTheta+0.9)*dist,
-      28 + (1.2-zoom)*10,
-      Math.sin(aimTheta+0.9)*dist
+      Math.cos(craftTheta + 0.9) * dist,
+      28 + (1.2 - zoom) * 10,
+      Math.sin(craftTheta + 0.9) * dist
     );
     if (camShake > 0) {
       camShake = Math.max(0, camShake - dt);
-      camGoal.x += (Math.random()-0.5) * 3.5 * camShake;
-      camGoal.y += (Math.random()-0.5) * 3.5 * camShake;
+      camGoal.x += (Math.random() - 0.5) * 3.5 * camShake;
+      camGoal.y += (Math.random() - 0.5) * 3.5 * camShake;
     }
-    camera.position.lerp(camGoal, 1-Math.exp(-3*dt));
-    camera.lookAt(target.x*0.2, 4, target.z*0.2);
-    camera.fov = THREE.MathUtils.lerp(camera.fov, 48 + zoom*10, 0.1);
+    camera.position.lerp(camGoal, 1 - Math.exp(-3 * dt));
+    camera.lookAt(target.x * 0.2, 4, target.z * 0.2);
+    camera.fov = THREE.MathUtils.lerp(camera.fov, 48 + zoom * 10, 0.1);
     camera.updateProjectionMatrix();
   }
 
-  if (sun) sun.rotation.y += dt*0.05;
-  if (sunLight) sunLight.intensity = 2.6 + Math.sin(clockT*2)*0.3;
+  if (sun) sun.rotation.y += dt * 0.05;
+  if (sunLight) sunLight.intensity = (2.6 + (sunScale - 1) * 2) + Math.sin(clockT * 2) * 0.3;
 
   renderer.render(scene, camera);
   publishGame();
   requestAnimationFrame(frame);
 }
 
-boot().catch((err)=>{
+boot().catch((err) => {
   console.error(err);
-  setText('loadmsg', String(err.message||err));
+  setText('loadmsg', String(err.message || err));
 });

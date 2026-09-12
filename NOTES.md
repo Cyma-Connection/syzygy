@@ -1,19 +1,22 @@
-# NOTES — SYZYGY SNAP
+# NOTES — SYZYGY ORBIT SNAP
 
-Arcade rebuild (2026-09-12): timing alignment SNAP, waves, lives, combo, pinch-zoom, local+global ranks.
+Major pivot (2026-09-12): auto-orbit craft; feel alignment; SNAP. Kept polish (waves, lives, combo, heat, mute, ranks, coach, style-lock).
 
 ## Loop
-- Drag aim through the sun
-- Relic sweeps in; ALIGN meter fills
-- SNAP: Perfect / Good / OK — or miss → lose a life
-- 5 snaps → next wave (faster, tighter)
-- 3 lives → run over → save score
+- Craft auto-orbits the sun (speed rises per wave)
+- World rings: relic / planet / star / debris (multiple)
+- Feel align (pulse, meter, rising tone) then SNAP
+- Debris SNAP = lose life; stack bonus if planet/star on same ray
+- 5 good snaps → wave++; sun grows + brightens
+- 3 Perfect streak → HEAT + unlock LOCK (auto-align ~2.5s)
+- Lives 0 → cinematic shatter (craft + objects + sun) → OVER
 
 ## Controls
-- Drag: aim
-- SNAP button: lock
+- SNAP: commit alignment
+- LOCK: unlocked after 3 Perfect — brief auto-steer / soft snap
 - Pinch: zoom
+- Mute: top-right
 
 ## Leaderboard
 - Local: localStorage
-- Global: scores.keithcirkel.co.uk game `33fwOVKzDg7Z`
+- Global: best-effort remote

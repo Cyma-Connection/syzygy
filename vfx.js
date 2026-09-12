@@ -209,7 +209,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   let meteorCD = 2;
 
   return {
-    update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1 } = {}) {
+    update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false } = {}) {
       // trail
       if (craftPos) {
         if (craftPos.distanceToSquared(lastCraft) > 0.4) {
@@ -252,9 +252,10 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
       }
       sparks.material.opacity = 0.35 + Math.min(1, speed / 40) * 0.5;
 
-      // alignment heat on trail
-      trail.material.opacity = 0.35 + alignT * 0.5;
-      trail.material.color.setHex(alignT > 0.6 ? cold : amber);
+      // alignment / HEAT orbit trail (amber when heat streak)
+      trail.material.opacity = 0.35 + alignT * 0.5 + (heat ? 0.22 : 0);
+      if (heat) trail.material.color.setHex(amber);
+      else trail.material.color.setHex(alignT > 0.6 ? cold : amber);
 
       // meteors
       meteorCD -= dt;

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>SYZYGY SNAP</title>
-  <meta name="description" content="Arcade orbital alignment — SNAP through the dying sun. 404 Game Jam." />
+  <title>SYZYGY — ORBIT SNAP</title>
+  <meta name="description" content="ORBIT SNAP — auto-orbit, feel alignment, SNAP through the dying sun. 404 Game Jam." />
   <script type="importmap">
   {
     "imports": {
@@ -74,25 +74,41 @@
     #combo { position:absolute; left:0; right:0; top:38%; text-align:center; font-size:28px; letter-spacing:.2em;
       color:var(--good); opacity:0; text-shadow:0 0 24px rgba(90,214,122,.6); transition:opacity .15s; }
     #combo.show { opacity:1; }
-    #meterWrap { position:absolute; left:50%; bottom:max(110px, calc(env(safe-area-inset-bottom) + 100px));
+    #meterWrap { position:absolute; left:50%; bottom:max(128px, calc(env(safe-area-inset-bottom) + 118px));
       transform:translateX(-50%); width:min(280px, 70vw); }
     #meterBg { height:10px; border-radius:6px; background:rgba(255,255,255,.1); overflow:hidden; border:1px solid rgba(255,255,255,.12); }
     #meterFill { height:100%; width:0%; background:linear-gradient(90deg, var(--cold), var(--amber), var(--good));
       box-shadow:0 0 12px rgba(232,160,74,.5); transition: width .05s linear; }
     #meterLabel { text-align:center; font-size:10px; letter-spacing:.2em; color:#7a8494; margin-top:6px; }
-    #snapBtn { pointer-events:auto; position:absolute; left:50%; bottom:max(28px, env(safe-area-inset-bottom));
-      transform:translateX(-50%); width:108px; height:108px; border-radius:50%;
+
+    /* Thumb-first dual controls: SNAP + LOCK */
+    #controls { pointer-events:none; position:absolute; left:50%; bottom:max(22px, env(safe-area-inset-bottom));
+      transform:translateX(-50%); display:flex; align-items:flex-end; gap:18px; }
+    #snapBtn { pointer-events:auto; width:108px; height:108px; border-radius:50%;
       border:2px solid rgba(232,160,74,.55); background:radial-gradient(circle at 40% 35%, rgba(232,160,74,.35), rgba(10,12,20,.85));
       color:var(--amber); font:inherit; font-size:14px; letter-spacing:.28em; text-indent:.28em; cursor:pointer;
       box-shadow:0 0 30px rgba(232,160,74,.2); }
     #snapBtn.hot { border-color:var(--good); color:var(--good); box-shadow:0 0 40px rgba(90,214,122,.45);
-      animation: pulse var(--snap-pulse, 0.55s) ease-in-out infinite; }
+      animation: pulseSnap var(--snap-pulse, 0.55s) ease-in-out infinite; }
     #snapBtn.near { border-color:var(--amber); box-shadow:0 0 28px rgba(232,160,74,.35);
-      animation: pulse var(--snap-pulse, 0.7s) ease-in-out infinite; }
-    @keyframes pulse { 0%,100%{ transform:translateX(-50%) scale(1)} 50%{ transform:translateX(-50%) scale(1.06)} }
-    #coach { display:none !important; /* replaced by first-run flow */  position:absolute; right:max(8px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%);
-      width:min(190px,40vw); padding:12px; border-radius:10px; background:rgba(8,10,18,.75);
-      border:1px solid rgba(107,140,255,.25); font-size:10px; line-height:1.55; color:#9aa3b5; letter-spacing:.03em; }
+      animation: pulseSnap var(--snap-pulse, 0.7s) ease-in-out infinite; }
+    #snapBtn.danger { border-color:var(--bad); color:var(--bad); box-shadow:0 0 28px rgba(255,77,106,.4);
+      animation: pulseSnap 0.4s ease-in-out infinite; }
+    @keyframes pulseSnap { 0%,100%{ transform:scale(1)} 50%{ transform:scale(1.06)} }
+
+    #btnAutoAlign { pointer-events:auto; position:relative; width:72px; height:72px; border-radius:50%;
+      border:2px solid rgba(107,140,255,.4); background:radial-gradient(circle at 40% 35%, rgba(107,140,255,.25), rgba(10,12,20,.85));
+      color:var(--cold); font:inherit; font-size:11px; letter-spacing:.18em; text-indent:.1em; cursor:pointer;
+      box-shadow:0 0 18px rgba(107,140,255,.15); overflow:hidden; margin-bottom:12px; }
+    #btnAutoAlign.locked { opacity:.35; border-color:#445; color:#667; }
+    #btnAutoAlign.ready { border-color:var(--cold); box-shadow:0 0 28px rgba(107,140,255,.45);
+      animation: pulseSnap 0.9s ease-in-out infinite; }
+    #btnAutoAlign.active { border-color:var(--good); color:var(--good); box-shadow:0 0 32px rgba(90,214,122,.4); }
+    #btnAutoAlign.cd { opacity:.7; }
+    #autoCharge { position:absolute; left:0; bottom:0; height:4px; width:0%; background:var(--cold);
+      box-shadow:0 0 8px rgba(107,140,255,.6); pointer-events:none; }
+
+    #coach { display:none !important; }
     @media (max-width:600px){ #coach{ display:none } }
 
     #lb { max-height:40vh; overflow:auto; width:min(340px,90vw); text-align:left; font-size:11px; letter-spacing:.06em; color:#9aa3b5; }
@@ -108,18 +124,18 @@
   <div id="fx"></div>
   <button type="button" id="btnMute" title="Mute">♪</button>
 
-  <div id="load"><h1>SYZYGY</h1><div id="loadmsg">calibrating SNAP…</div></div>
+  <div id="load"><h1>SYZYGY</h1><div id="loadmsg">calibrating ORBIT…</div></div>
 
   <div id="coachFlow" class="screen">
-    <h2 id="coachTitle">DRAG</h2>
-    <p id="coachBody">Glisse pour viser à travers le soleil.</p>
-    <div id="coachVisual" aria-hidden="true">⟶</div>
+    <h2 id="coachTitle">ORBIT</h2>
+    <p id="coachBody">Ton craft orbite seul. Observe les anneaux — le soleil au centre.</p>
+    <div id="coachVisual" aria-hidden="true">◎</div>
     <button class="btn primary" id="btnCoachNext">TAP</button>
   </div>
 
   <div id="start" class="screen">
-    <h2>SYZYGY SNAP</h2>
-    <p>Drag to aim through the sun. When the meter hits the sweet spot — <b style="color:var(--amber)">SNAP</b>. Build combos. Survive waves. Pinch to zoom.</p>
+    <h2>ORBIT SNAP</h2>
+    <p>Ton craft orbite. <b style="color:var(--amber)">Sens</b> l’alignement soleil→objet, puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. 3 PARFAIT débloquent <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.</p>
     <button class="btn primary" id="btnStart">PLAY</button>
     <button class="btn" id="btnLb">LEADERBOARD</button>
   </div>
@@ -148,14 +164,17 @@
       <span id="lives">● ● ●</span>
     </div>
     <div id="heatBadge">HEAT x2</div>
-    <div id="hint">Aim · then SNAP</div>
+    <div id="hint">Sens l’alignement · SNAP</div>
     <div id="combo">PERFECT x2</div>
-    <aside id="coach">1. Drag to align<br/>2. Wait for the green pulse<br/>3. Hit SNAP<br/>4. Pinch = zoom</aside>
+    <aside id="coach">ORBIT · FEEL · SNAP</aside>
     <div id="meterWrap">
       <div id="meterBg"><div id="meterFill"></div></div>
       <div id="meterLabel">ALIGNMENT</div>
     </div>
-    <button id="snapBtn" type="button">SNAP</button>
+    <div id="controls">
+      <button id="btnAutoAlign" type="button" class="locked" title="Auto-align LOCK">LOCK<span id="autoCharge"></span></button>
+      <button id="snapBtn" type="button">SNAP</button>
+    </div>
   </div>
 
   <script type="module" src="./main.js"></script>

@@ -1,6 +1,6 @@
-# SYZYGY SNAP
+# SYZYGY — ORBIT SNAP
 
-Arcade orbital alignment for the [404 Game Jam](https://game.404.xyz/). Drag to aim through a dying sun, then **SNAP** in the sweet spot. Build combos, clear waves, climb the board.
+Arcade orbital alignment for the [404 Game Jam](https://game.404.xyz/). Your craft **auto-orbits** a dying sun — **feel** the alignment, then **SNAP**. Débris = danger. Build combos, clear waves, climb the board.
 
 ## Play
 https://cyma-connection.github.io/syzygy/
@@ -8,12 +8,13 @@ https://cyma-connection.github.io/syzygy/
 Or serve this folder over HTTP and open `index.html`.
 
 ## Controls
-- **Drag** — aim your filament through the sun  
-- **SNAP** — lock when the meter peaks  
+- **SNAP** — lock when alignment peaks  
+- **LOCK** — unlock after 3 Perfect (brief auto-align)  
 - **Pinch** — zoom  
+- **Mute** — top-right  
 
 ## Jam telemetry
-`window.__READY__`, `window.__START__()`, `window.__GAME__` each frame (`pos`, `fps`, `score`, `draws`, `tris`, …).
+`window.__READY__`, `window.__START__()`, `window.__GAME__` each frame (`pos`, `fps`, `speed`, `score`, `draws`, `tris`, `state`, `wave`, `lives`, …).
 
 ## Stack
 Three.js geometry-as-code assets, procedural space audio, Pages hosting.
