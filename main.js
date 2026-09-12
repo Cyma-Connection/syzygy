@@ -139,6 +139,46 @@ function showCombo(label){
 
 function setHint(t){ setText('hint', t); }
 
+const COACH_SCREENS = [
+  { title: 'DRAG', body: 'Glisse pour viser à travers le soleil.', visual: '⟶' },
+  { title: 'SNAP', body: 'Quand le bouton pulse au sweet spot — SNAP.', visual: '◎' },
+  { title: 'COMBO', body: 'PARFAIT = combo. RATE = une vie perdue.', visual: '♥ ♥ ♥' },
+];
+let coachIdx = 0;
+
+function showStartOrCoach(){
+  const seen = localStorage.getItem('syzygy_coach_v1') === '1';
+  if (seen) {
+    $('coachFlow')?.classList.remove('on');
+    $('start')?.classList.add('on');
+    return;
+  }
+  $('start')?.classList.remove('on');
+  coachIdx = 0;
+  paintCoach();
+  $('coachFlow')?.classList.add('on');
+}
+
+function paintCoach(){
+  const s = COACH_SCREENS[coachIdx];
+  if (!s) return;
+  setText('coachTitle', s.title);
+  setText('coachBody', s.body);
+  setText('coachVisual', s.visual);
+}
+
+function advanceCoach(){
+  coachIdx += 1;
+  if (coachIdx >= COACH_SCREENS.length) {
+    localStorage.setItem('syzygy_coach_v1', '1');
+    $('coachFlow')?.classList.remove('on');
+    $('start')?.classList.add('on');
+    return;
+  }
+  paintCoach();
+}
+
+
 async function boot(){
   const canvas = $('c');
   renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
@@ -202,6 +242,8 @@ async function boot(){
   publishGame();
 
   $('load')?.classList.add('gone');
+  showStartOrCoach();
+  $('btnCoachNext')?.addEventListener('click', (e)=>{ e.preventDefault(); advanceCoach(); });
   requestAnimationFrame(frame);
 }
 
@@ -398,7 +440,10 @@ function endRun(){
   $('over')?.classList.add('on');
   setText('overSub', `Score ${score} · Wave ${wave} · Best combo x${bestCombo}`);
   const nameIn = $('nameIn');
-  if (nameIn && !nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0,12);
+  if (nameIn) {
+    if (!nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0,12);
+    setTimeout(() => nameIn.focus(), 50);
+  }
   publishGame();
 }
 
@@ -476,16 +521,10 @@ function bindInput(canvas){
   });
   $('btnStart')?.addEventListener('click', ()=> startRun());
   $('btnRetry')?.addEventListener('click', ()=> startRun());
-  $('btnLb')?.addEventListener('click', ()=> openBoard('local'));
+  $('btnLb')?.addEventListener('click', ()=> openBoard());
   $('btnBack')?.addEventListener('click', ()=>{
     $('board')?.classList.remove('on');
     $('start')?.classList.add('on');
-  });
-  $('tabLocal')?.addEventListener('click', ()=> renderBoard(loadLocal(), 'LOCAL'));
-  $('tabGlobal')?.addEventListener('click', async ()=>{
-    $('lb').innerHTML = '<em>loading global…</em>';
-    try { renderBoard(await fetchGlobal(), 'GLOBAL'); }
-    catch { $('lb').innerHTML = '<em>Global unreachable — try later</em>'; }
   });
   $('btnSubmit')?.addEventListener('click', async ()=>{
     const name = ($('nameIn')?.value || 'ANON').trim().slice(0,12) || 'ANON';
@@ -493,7 +532,7 @@ function bindInput(canvas){
     saveLocal(name, score, wave);
     $('btnSubmit').textContent = 'SAVING…';
     try {
-      await submitGlobal(name, score, playElapsed);
+      await submitGlobal(name, score, playElapsed, wave);
       $('btnSubmit').textContent = 'SAVED ✓';
     } catch (err) {
       console.warn(err);
@@ -502,17 +541,18 @@ function bindInput(canvas){
   });
 }
 
-function openBoard(which){
+function openBoard(){
   $('start')?.classList.remove('on');
   $('board')?.classList.add('on');
-  if (which==='global') $('tabGlobal')?.click();
-  else renderBoard(loadLocal(), 'LOCAL');
+  const note = $('lbNote');
+  if (note) note.textContent = 'Classement local — global bientôt';
+  renderBoard(loadLocal());
 }
 
-function renderBoard(rows, title){
+function renderBoard(rows){
   const lb = $('lb');
   if (!lb) return;
-  if (!rows.length) { lb.innerHTML = `<em>No ${title.toLowerCase()} scores yet</em>`; return; }
+  if (!rows.length) { lb.innerHTML = '<em>Aucun score encore — joue une run</em>'; return; }
   lb.innerHTML = `<table>${rows.slice(0,15).map((r,i)=>
     `<tr><td>${i+1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
   ).join('')}</table>`;

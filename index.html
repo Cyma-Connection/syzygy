@@ -64,6 +64,10 @@
       border:1px solid #445; background:rgba(10,12,20,.75); color:#9aa3b5; font:inherit;
       font-size:14px; cursor:pointer; z-index:15; }
     #btnMute.off { color:var(--bad); border-color:var(--bad); }
+    #coachVisual { font-size:42px; letter-spacing:.2em; color:var(--amber); min-height:52px;
+      animation: coachPulse 1.1s ease-in-out infinite; }
+    @keyframes coachPulse { 0%,100%{ opacity:.45; transform:translateX(0)} 50%{ opacity:1; transform:translateX(8px)} }
+    #start.on { display:flex; }
     #lives { color:#fff; }
     #hint { position:absolute; left:0; right:0; top:max(42px, calc(env(safe-area-inset-top) + 32px));
       text-align:center; font-size:12px; letter-spacing:.12em; color:#cfd6e6; text-shadow:0 2px 10px #000; }
@@ -86,7 +90,7 @@
     #snapBtn.near { border-color:var(--amber); box-shadow:0 0 28px rgba(232,160,74,.35);
       animation: pulse var(--snap-pulse, 0.7s) ease-in-out infinite; }
     @keyframes pulse { 0%,100%{ transform:translateX(-50%) scale(1)} 50%{ transform:translateX(-50%) scale(1.06)} }
-    #coach { position:absolute; right:max(8px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%);
+    #coach { display:none !important; /* replaced by first-run flow */  position:absolute; right:max(8px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%);
       width:min(190px,40vw); padding:12px; border-radius:10px; background:rgba(8,10,18,.75);
       border:1px solid rgba(107,140,255,.25); font-size:10px; line-height:1.55; color:#9aa3b5; letter-spacing:.03em; }
     @media (max-width:600px){ #coach{ display:none } }
@@ -106,7 +110,14 @@
 
   <div id="load"><h1>SYZYGY</h1><div id="loadmsg">calibrating SNAP…</div></div>
 
-  <div id="start" class="screen on">
+  <div id="coachFlow" class="screen">
+    <h2 id="coachTitle">DRAG</h2>
+    <p id="coachBody">Glisse pour viser à travers le soleil.</p>
+    <div id="coachVisual" aria-hidden="true">⟶</div>
+    <button class="btn primary" id="btnCoachNext">TAP</button>
+  </div>
+
+  <div id="start" class="screen">
     <h2>SYZYGY SNAP</h2>
     <p>Drag to aim through the sun. When the meter hits the sweet spot — <b style="color:var(--amber)">SNAP</b>. Build combos. Survive waves. Pinch to zoom.</p>
     <button class="btn primary" id="btnStart">PLAY</button>
@@ -115,7 +126,7 @@
 
   <div id="board" class="screen">
     <h2>RANKS</h2>
-    <div class="row"><button class="btn" id="tabLocal">LOCAL</button><button class="btn" id="tabGlobal">GLOBAL</button></div>
+    <p id="lbNote" style="font-size:10px;letter-spacing:.1em;color:#7a8494;margin:0">Classement local — global bientôt</p>
     <div id="lb"><em>loading…</em></div>
     <button class="btn" id="btnBack">BACK</button>
   </div>
@@ -123,9 +134,9 @@
   <div id="over" class="screen">
     <h2>RUN OVER</h2>
     <p id="overSub">Score 0</p>
-    <input id="nameIn" maxlength="12" placeholder="YOUR TAG" />
+    <input id="nameIn" maxlength="12" placeholder="TON NOM" autocomplete="off" enterkeyhint="done" />
     <div class="row">
-      <button class="btn primary" id="btnSubmit">SAVE SCORE</button>
+      <button class="btn primary" id="btnSubmit">SAVE</button>
       <button class="btn" id="btnRetry">AGAIN</button>
     </div>
   </div>
