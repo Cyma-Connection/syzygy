@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
@@ -59,6 +59,10 @@
       transform:translateX(-50%); font-size:11px; letter-spacing:.24em; color:var(--amber);
       opacity:0; pointer-events:none; text-shadow:0 0 16px rgba(232,160,74,.7); }
     #heatBadge.on { opacity:1; }
+    #btnLang { pointer-events:auto; position:absolute; right:max(52px, calc(env(safe-area-inset-right) + 40px));
+      top:max(10px, env(safe-area-inset-top)); width:36px; height:36px; border-radius:8px;
+      border:1px solid #445; background:rgba(10,12,20,.75); color:#9aa3b5; font:inherit;
+      font-size:11px; letter-spacing:.08em; cursor:pointer; z-index:15; }
     #btnMute { pointer-events:auto; position:absolute; right:max(12px, env(safe-area-inset-right));
       top:max(10px, env(safe-area-inset-top)); width:36px; height:36px; border-radius:8px;
       border:1px solid #445; background:rgba(10,12,20,.75); color:#9aa3b5; font:inherit;
@@ -122,35 +126,36 @@
 <body>
   <canvas id="c"></canvas>
   <div id="fx"></div>
+  <button type="button" id="btnLang" title="Language">FR</button>
   <button type="button" id="btnMute" title="Mute">♪</button>
 
   <div id="load"><h1>SYZYGY</h1><div id="loadmsg">calibrating ORBIT…</div></div>
 
   <div id="coachFlow" class="screen">
     <h2 id="coachTitle">ORBIT</h2>
-    <p id="coachBody">Ton craft orbite seul. Observe les anneaux — le soleil au centre.</p>
+    <p id="coachBody">Your craft orbits on its own. Watch the rings — sun at the center.</p>
     <div id="coachVisual" aria-hidden="true">◎</div>
     <button class="btn primary" id="btnCoachNext">TAP</button>
   </div>
 
   <div id="start" class="screen">
-    <h2>ORBIT SNAP</h2>
-    <p>Ton craft orbite. <b style="color:var(--amber)">Sens</b> l’alignement soleil→objet, puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. 3 PARFAIT débloquent <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.</p>
+    <h2 id="startTitle">ORBIT SNAP</h2>
+    <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 PERFECT unlock <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.</p>
     <button class="btn primary" id="btnStart">PLAY</button>
     <button class="btn" id="btnLb">LEADERBOARD</button>
   </div>
 
   <div id="board" class="screen">
-    <h2>RANKS</h2>
-    <p id="lbNote" style="font-size:10px;letter-spacing:.1em;color:#7a8494;margin:0">Classement local — global bientôt</p>
+    <h2 id="boardTitle">RANKS</h2>
+    <p id="lbNote" style="font-size:10px;letter-spacing:.1em;color:#7a8494;margin:0">Local ranks — global soon</p>
     <div id="lb"><em>loading…</em></div>
     <button class="btn" id="btnBack">BACK</button>
   </div>
 
   <div id="over" class="screen">
-    <h2>RUN OVER</h2>
+    <h2 id="overTitle">RUN OVER</h2>
     <p id="overSub">Score 0</p>
-    <input id="nameIn" maxlength="12" placeholder="TON NOM" autocomplete="off" enterkeyhint="done" />
+    <input id="nameIn" maxlength="12" placeholder="YOUR TAG" autocomplete="off" enterkeyhint="done" />
     <div class="row">
       <button class="btn primary" id="btnSubmit">SAVE</button>
       <button class="btn" id="btnRetry">AGAIN</button>
@@ -164,7 +169,7 @@
       <span id="lives">● ● ● ● ●</span>
     </div>
     <div id="heatBadge">HEAT x2</div>
-    <div id="hint">Sens l’alignement · SNAP</div>
+    <div id="hint">Feel the alignment · SNAP</div>
     <div id="combo">PERFECT x2</div>
     <aside id="coach">ORBIT · FEEL · SNAP</aside>
     <div id="meterWrap">

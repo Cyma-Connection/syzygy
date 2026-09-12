@@ -9,6 +9,7 @@ import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js';
 import { createVfx } from './vfx.js';
 import { createPlanet, createStar, createDebris } from './objects.js';
 import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js';
+import { t, applyDom, toggleLang, coachScreens, getLang } from './i18n.js';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -109,8 +110,8 @@ function updateHud() {
   const need = waveParams(wave).perWave;
   const left = Math.max(0, need - snapsInWave);
   setText('scoreBox', String(score));
-  setText('waveBox', `WAVE ${wave}`);
-  setText('waveNext', `→ ${left} SNAP${left === 1 ? '' : 'S'}`);
+  setText('waveBox', t('wave', wave));
+  setText('waveNext', t('snapsLeft', left));
   setText('lives', '● '.repeat(lives).trim() || '○');
   const fill = $('meterFill');
   if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
@@ -134,10 +135,10 @@ function updateHud() {
     aa.classList.toggle('ready', autoAlignUnlocked && autoAlignReady && !autoAlignActive && autoAlignCd <= 0);
     aa.classList.toggle('active', autoAlignActive);
     aa.classList.toggle('cd', autoAlignCd > 0);
-    if (!autoAlignUnlocked) aa.textContent = 'LOCK';
-    else if (autoAlignActive) aa.textContent = 'SYNC';
+    if (!autoAlignUnlocked) aa.textContent = t('lock');
+    else if (autoAlignActive) aa.textContent = t('sync');
     else if (autoAlignCd > 0) aa.textContent = `${Math.ceil(autoAlignCd)}s`;
-    else aa.textContent = 'LOCK';
+    else aa.textContent = t('lock');
     const charge = $('autoCharge');
     if (charge) {
       let pct = 0;
@@ -168,11 +169,6 @@ function showCombo(label) {
 
 function setHint(t) { setText('hint', t); }
 
-const COACH_SCREENS = [
-  { title: 'ORBIT', body: 'Ton craft orbite seul. Observe les anneaux — le soleil au centre.', visual: '◎' },
-  { title: 'FEEL ALIGN', body: 'Sens l’alignement : bouton qui pulse, mètre qui monte, ton qui monte.', visual: '⟶◎' },
-  { title: 'SNAP', body: 'SNAP au sweet spot. Débris = danger. 3 PARFAIT → LOCK.', visual: '⚡' },
-];
 let coachIdx = 0;
 
 function showStartOrCoach() {
@@ -189,16 +185,18 @@ function showStartOrCoach() {
 }
 
 function paintCoach() {
-  const s = COACH_SCREENS[coachIdx];
+  const screens = coachScreens();
+  const s = screens[coachIdx];
   if (!s) return;
   setText('coachTitle', s.title);
   setText('coachBody', s.body);
   setText('coachVisual', s.visual);
 }
+window.__syzygyPaintCoach = paintCoach;
 
 function advanceCoach() {
   coachIdx += 1;
-  if (coachIdx >= COACH_SCREENS.length) {
+  if (coachIdx >= coachScreens().length) {
     localStorage.setItem('syzygy_coach_v1', '1');
     $('coachFlow')?.classList.remove('on');
     $('start')?.classList.add('on');
@@ -298,7 +296,7 @@ function spawnWaveField() {
     place(o.mesh, o.theta, o.radius, o.y);
     world.push(o);
   }
-  if (!isBossWave) setHint(wave === 1 ? 'Sens l’alignement · SNAP' : 'ALIGN & SNAP');
+  if (!isBossWave) setHint(wave === 1 ? t('hintFeel') : t('hintAlign'));
 }
 
 function refillObject() {
@@ -456,8 +454,8 @@ function updateHeat() {
     if (!autoAlignUnlocked) {
       autoAlignUnlocked = true;
       autoAlignReady = true;
-      showCombo('LOCK DÉBLOQUÉ');
-      setHint('LOCK prêt — sync 2.5s');
+      showCombo(t('lockUnlocked'));
+      setHint(t('lockReady'));
     } else if (autoAlignCd <= 0) {
       autoAlignReady = true;
     }
@@ -493,8 +491,8 @@ function maybeAdvanceWave() {
     orbitSpeed = waveParams(wave).baseSpeed;
     audio.stingWave?.();
     audio.setWaveLayer?.(wave);
-    setHint(`WAVE ${wave}`);
-    showCombo(`WAVE ${wave}`);
+    setHint(t('wave', wave));
+    showCombo(t('wave', wave));
     spawnWaveField();
   }
 }
@@ -557,7 +555,7 @@ function tickAutoAlign(dt) {
     if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.6) {
       doSnap();
     } else {
-      setHint('LOCK fini');
+      setHint(t('lockDone'));
     }
   }
 }
@@ -629,7 +627,7 @@ function endRun() {
   // longer beat before OVER UI so boom lands
   setTimeout(() => {
     $('over')?.classList.add('on');
-    setText('overSub', `Score ${score} · Wave ${wave} · Best combo x${bestCombo}`);
+    setText('overSub', t('overSub', score, wave, bestCombo));
     const nameIn = $('nameIn');
     if (nameIn) {
       if (!nameIn.value) nameIn.value = (localStorage.getItem('syzygy_tag') || '').slice(0, 12);
@@ -763,6 +761,7 @@ async function boot() {
   window.__START__ = startRun;
   publishGame();
 
+  applyDom();
   $('load')?.classList.add('gone');
   showStartOrCoach();
   $('btnCoachNext')?.addEventListener('click', (e) => { e.preventDefault(); advanceCoach(); });
@@ -822,11 +821,17 @@ function bindInput(canvas) {
 
   $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
   $('btnAutoAlign')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); });
+  $('btnLang')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    toggleLang();
+    updateHud();
+    paintCoach();
+  });
   $('btnMute')?.addEventListener('click', (e) => {
     e.preventDefault();
     const m = audio.toggleMute();
     const b = $('btnMute');
-    if (b) { b.classList.toggle('off', m); b.textContent = m ? 'Mute' : '♪'; }
+    if (b) { b.classList.toggle('off', m); b.textContent = m ? t('mute') : '♪'; }
   });
   $('btnStart')?.addEventListener('click', () => startRun());
   $('btnRetry')?.addEventListener('click', () => startRun());
@@ -839,13 +844,13 @@ function bindInput(canvas) {
     const name = ($('nameIn')?.value || 'ANON').trim().slice(0, 12) || 'ANON';
     localStorage.setItem('syzygy_tag', name);
     saveLocal(name, score, wave);
-    $('btnSubmit').textContent = 'SAVING…';
+    $('btnSubmit').textContent = t('saving');
     try {
       await submitGlobal(name, score, playElapsed, wave);
-      $('btnSubmit').textContent = 'SAVED ✓';
+      $('btnSubmit').textContent = t('saved');
     } catch (err) {
       console.warn(err);
-      $('btnSubmit').textContent = 'LOCAL SAVED';
+      $('btnSubmit').textContent = t('localSaved');
     }
   });
 }
@@ -854,14 +859,14 @@ function openBoard() {
   $('start')?.classList.remove('on');
   $('board')?.classList.add('on');
   const note = $('lbNote');
-  if (note) note.textContent = 'Classement local — global bientôt';
+  if (note) note.textContent = t('lbNote');
   renderBoard(loadLocal());
 }
 
 function renderBoard(rows) {
   const lb = $('lb');
   if (!lb) return;
-  if (!rows.length) { lb.innerHTML = '<em>Aucun score encore — joue une run</em>'; return; }
+  if (!rows.length) { lb.innerHTML = `<em>${t('lbEmpty')}</em>`; return; }
   lb.innerHTML = `<table>${rows.slice(0, 15).map((r, i) =>
     `<tr><td>${i + 1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
   ).join('')}</table>`;
