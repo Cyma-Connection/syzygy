@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=b05econ';
-import { createSpaceAudio } from './audio.js?v=b05econ';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b05econ';
-import { createVfx } from './vfx.js?v=b05econ';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=b05econ';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b05econ';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b05econ';
+import { ASSET } from './assetlib.js?v=b06portal';
+import { createSpaceAudio } from './audio.js?v=b06portal';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b06portal';
+import { createVfx } from './vfx.js?v=b06portal';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=b06portal';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b06portal';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b06portal';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -85,7 +85,7 @@ let lockStreak = 0; // "Perfect"s toward one LOCK charge
 let lockFreezeLeft = 0; // seconds of alignment freeze remaining
 let lockTargetTheta = null; // soft-lock aim (best non-debris)
 
-/** Micro-bonus portal (7 relic SNAPs → geometric stage). Tiers rise each entry. */
+/** Micro-bonus portal (4 relic SNAPs → geometric stage). Persists across waves. */
 let relicsCollected = 0;
 let bonusActive = false;
 let bonusTimer = 0;
@@ -643,13 +643,7 @@ function maybeSpawnPortal() {
 }
 
 function tickPortalExpiry() {
-  if (bonusActive || !findPortal()) return;
-  // Unused portal clears after ~1 wave
-  if (portalSpawnWave >= 0 && wave > portalSpawnWave) {
-    clearPortal();
-    relicsCollected = 0;
-    setHint(t('hintAlign'));
-  }
+  // Intentionally empty: portal stays until SNAP or run ends (never cleared by wave).
 }
 
 function applyBonusLook(on, tier = 1) {
@@ -883,13 +877,18 @@ function doSnap() {
   const good = goodBand(wave);
   const target = bestTarget;
 
-  if (!target || align < 0.45) {
-    failLife(align < 0.2 ? 'NO SYZYGY' : 'WEAK ALIGN');
+  // Portal: reachable even amid wave clutter (softer gate, never wiped by waves)
+  if (target?.kind === KIND.PORTAL) {
+    if (align < 0.36) {
+      failLife(align < 0.18 ? 'NO SYZYGY' : 'WEAK ALIGN');
+      return;
+    }
+    enterBonus(target);
     return;
   }
 
-  if (target.kind === KIND.PORTAL) {
-    enterBonus(target);
+  if (!target || align < 0.45) {
+    failLife(align < 0.2 ? 'NO SYZYGY' : 'WEAK ALIGN');
     return;
   }
 
@@ -1026,11 +1025,18 @@ function maybeAdvanceWave() {
     audio.setWaveLayer?.(wave);
     setHint(t('wave', wave));
     showCombo(t('wave', wave));
-    const hadPortal = portalSpawnWave >= 0;
+    // Portal must SURVIVE wave reboot — stash, clear field, restore
+    const savedPortal = findPortal();
+    if (savedPortal) {
+      const ix = world.indexOf(savedPortal);
+      if (ix >= 0) world.splice(ix, 1);
+    }
     spawnWaveField();
-    if (hadPortal) {
-      portalSpawnWave = -1;
-      relicsCollected = 0;
+    if (savedPortal) {
+      world.push(savedPortal);
+      if (savedPortal.mesh && savedPortal.mesh.parent !== scene) scene.add(savedPortal.mesh);
+      setHint(t('hintPortal'));
+      showCombo('PORTAL');
     }
   }
 }
@@ -1763,6 +1769,19 @@ function frame(now) {
         o.mesh.rotation.z += o.spin * 0.5 * dt;
         const rings = o.mesh.userData?.portalRings;
         if (rings) for (const r of rings) r.rotation.z += dt * 0.8;
+        // Loud readable pulse — portal must scream "SNAP ME"
+        if (o.kind === KIND.PORTAL) {
+          const pulse = 1 + Math.sin(clockT * 5.5) * 0.12;
+          o.mesh.scale.setScalar(pulse);
+          const core = o.mesh.userData?.portalCore;
+          if (core?.material?.emissiveIntensity != null) {
+            core.material.emissiveIntensity = 0.85 + (0.5 + 0.5 * Math.sin(clockT * 6.2)) * 0.9;
+          }
+          const halo = o.mesh.userData?.portalHalo;
+          if (halo?.material) {
+            halo.material.opacity = 0.16 + (0.5 + 0.5 * Math.sin(clockT * 4.2)) * 0.28;
+          }
+        }
       }
     }
 

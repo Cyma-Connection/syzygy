@@ -254,6 +254,7 @@ export function createPortal(scale = 1) {
     })
   );
   g.add(core);
+  g.userData.portalCore = core;
   const inner = new THREE.Mesh(
     new THREE.SphereGeometry(1.2 * scale, 12, 10),
     new THREE.MeshBasicMaterial({
@@ -303,7 +304,10 @@ export function createPortal(scale = 1) {
     })
   );
   g.add(halo);
+  g.userData.portalHalo = halo;
   g.userData.portalRings = [r1, r2, r3];
+  // Slightly larger default so it reads against wave clutter
+  g.scale.setScalar(1.15);
   return g;
 }
 
