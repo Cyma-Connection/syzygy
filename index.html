@@ -45,6 +45,11 @@
     .btn.primary { border-color:var(--amber); color:var(--amber); }
     .btn:active { transform:scale(.98); }
     .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    #langRow { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; margin-top:4px; }
+    #langLabel { font-size:10px; letter-spacing:.18em; color:#7a8494; width:100%; text-align:center; margin-bottom:2px; }
+    .langChip { min-width:52px; padding:10px 14px; border:1px solid #4a5057; background:rgba(16,18,28,.9);
+      color:#9aa3b5; font:inherit; font-size:11px; letter-spacing:.16em; cursor:pointer; pointer-events:auto; }
+    .langChip.on { border-color:var(--amber); color:var(--amber); box-shadow:0 0 16px rgba(232,160,74,.25); }
 
     #hud { position:fixed; inset:0; z-index:10; display:none; pointer-events:none; }
     #hud.on { display:block; }
@@ -174,6 +179,12 @@
   <div id="start" class="screen">
     <h2 id="startTitle">ORBIT SNAP</h2>
     <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 PERFECT unlock <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.</p>
+    <div id="langRow">
+      <div id="langLabel">LANGUAGE</div>
+      <button type="button" class="langChip on" id="lang_en" data-lang="en">EN</button>
+      <button type="button" class="langChip" id="lang_fr" data-lang="fr">FR</button>
+      <button type="button" class="langChip" id="lang_es" data-lang="es">ES</button>
+    </div>
     <button class="btn primary" id="btnStart">PLAY</button>
     <button class="btn" id="btnLb">LEADERBOARD</button>
   </div>

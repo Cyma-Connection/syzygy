@@ -9,7 +9,7 @@ import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js';
 import { createVfx } from './vfx.js';
 import { createPlanet, createStar, createDebris } from './objects.js';
 import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js';
-import { t, applyDom, toggleLang, coachScreens, getLang } from './i18n.js';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -1042,6 +1042,14 @@ function bindInput(canvas) {
     updateHud();
     paintCoach();
   });
+  for (const code of ['en', 'fr', 'es']) {
+    $(`lang_${code}`)?.addEventListener('click', (e) => {
+      e.preventDefault();
+      setLang(code);
+      updateHud();
+      paintCoach();
+    });
+  }
   $('btnMute')?.addEventListener('click', (e) => {
     e.preventDefault();
     audio.start(); // ensure ctx unlocked even if PLAY was skipped

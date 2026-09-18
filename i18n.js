@@ -1,4 +1,6 @@
-/** EN default + FR toggle. Persist: localStorage syzygy_lang */
+/** EN default + FR + ES. Persist: localStorage syzygy_lang */
+const LANGS = ['en', 'fr', 'es'];
+
 const STR = {
   en: {
     loadmsg: 'calibrating ORBIT…',
@@ -27,7 +29,7 @@ const STR = {
     coach1t: 'ORBIT',
     coach1b: 'Your craft orbits on its own. Watch the rings — sun at the center.',
     coach2t: 'FEEL ALIGN',
-    coach2b: 'Feel alignment: button pulse, meter rise, rising tone.',
+    coach2b: 'Feel alignment: button pulse, meter rise, soft tone.',
     coach3t: 'SNAP',
     coach3b: 'SNAP at the sweet spot. Debris = danger. 3 PERFECT → LOCK.',
     lockUnlocked: 'LOCK UNLOCKED',
@@ -39,7 +41,8 @@ const STR = {
     overSub: (score, wave, best) => `Score ${score} · Wave ${wave} · Best combo x${best}`,
     wave: (n) => `WAVE ${n}`,
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
-    langBtn: 'FR',
+    langBtn: 'EN',
+    langLabel: 'LANGUAGE',
     overRankNote: 'YOUR RUN · LOCAL RANKS',
     hull: 'HULL',
   },
@@ -70,7 +73,7 @@ const STR = {
     coach1t: 'ORBIT',
     coach1b: 'Ton craft orbite seul. Observe les anneaux — le soleil au centre.',
     coach2t: 'SENS L’ALIGN.',
-    coach2b: 'Sens l’alignement : bouton qui pulse, mètre qui monte, ton qui monte.',
+    coach2b: 'Sens l’alignement : bouton qui pulse, mètre qui monte, ton doux.',
     coach3t: 'SNAP',
     coach3b: 'SNAP au sweet spot. Débris = danger. 3 PARFAIT → LOCK.',
     lockUnlocked: 'LOCK DÉBLOQUÉ',
@@ -82,19 +85,65 @@ const STR = {
     overSub: (score, wave, best) => `Score ${score} · Vague ${wave} · Meilleur combo x${best}`,
     wave: (n) => `VAGUE ${n}`,
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
-    langBtn: 'EN',
+    langBtn: 'FR',
+    langLabel: 'LANGUE',
     overRankNote: 'TA RUN · CLASSEMENT LOCAL',
     hull: 'COQUE',
+  },
+  es: {
+    loadmsg: 'calibrando ÓRBITA…',
+    startTitle: 'ORBIT SNAP',
+    startBody: 'Tu nave orbita sola. <b style="color:var(--amber)">Siente</b> la alineación sol→objeto, luego <b style="color:var(--amber)">SNAP</b>. Escombros = peligro. 3 PERFECT desbloquean <b style="color:var(--cold)">LOCK</b>. Pellizca = zoom.',
+    play: 'JUGAR',
+    leaderboard: 'CLASIFICACIÓN',
+    ranks: 'RANGOS',
+    lbNote: 'Clasificación local — global pronto',
+    lbEmpty: 'Sin puntuaciones aún — juega una run',
+    lbLoading: 'cargando…',
+    back: 'ATRÁS',
+    runOver: 'FIN DE RUN',
+    namePh: 'TU TAG',
+    save: 'GUARDAR',
+    again: 'OTRA',
+    menu: 'MENÚ',
+    saving: 'GUARDANDO…',
+    saved: 'GUARDADO ✓',
+    localSaved: 'LOCAL OK',
+    hintFeel: 'Siente la alineación · SNAP',
+    hintAlign: 'ALINEA & SNAP',
+    meter: 'ALINEACIÓN',
+    heat: 'HEAT x2',
+    coachTap: 'TAP',
+    coach1t: 'ÓRBITA',
+    coach1b: 'Tu nave orbita sola. Mira los anillos — el sol en el centro.',
+    coach2t: 'SIENTE',
+    coach2b: 'Siente la alineación: pulso del botón, medidor y tono suave.',
+    coach3t: 'SNAP',
+    coach3b: 'SNAP en el punto dulce. Escombros = peligro. 3 PERFECT → LOCK.',
+    lockUnlocked: 'LOCK DESBLOQUEADO',
+    lockReady: 'LOCK listo — sync 2.5s',
+    lockDone: 'LOCK terminado',
+    lock: 'LOCK',
+    sync: 'SYNC',
+    mute: 'Mudo',
+    overSub: (score, wave, best) => `Score ${score} · Oleada ${wave} · Mejor combo x${best}`,
+    wave: (n) => `OLEADA ${n}`,
+    snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
+    langBtn: 'ES',
+    langLabel: 'IDIOMA',
+    overRankNote: 'TU RUN · RANKING LOCAL',
+    hull: 'CASCO',
   },
 };
 
 let lang = 'en';
 try {
   const saved = localStorage.getItem('syzygy_lang');
-  if (saved === 'fr' || saved === 'en') lang = saved;
+  if (LANGS.includes(saved)) lang = saved;
 } catch (_) {}
 
 export function getLang() { return lang; }
+export function listLangs() { return LANGS.slice(); }
 
 export function t(key, ...args) {
   const pack = STR[lang] || STR.en;
@@ -111,6 +160,19 @@ export function coachScreens() {
 }
 
 function $(id) { return document.getElementById(id); }
+
+function syncLangChips() {
+  for (const code of LANGS) {
+    const el = $(`lang_${code}`);
+    if (!el) continue;
+    el.classList.toggle('on', code === lang);
+    el.setAttribute('aria-pressed', code === lang ? 'true' : 'false');
+  }
+  const corner = $('btnLang');
+  if (corner) corner.textContent = (STR[lang] || STR.en).langBtn;
+  const lab = $('langLabel');
+  if (lab) lab.textContent = t('langLabel');
+}
 
 /** Re-apply static DOM strings for current lang. */
 export function applyDom() {
@@ -138,9 +200,7 @@ export function applyDom() {
   set('hint', t('hintFeel'));
   const nameIn = $('nameIn');
   if (nameIn) nameIn.placeholder = t('namePh');
-  const langBtn = $('btnLang');
-  if (langBtn) langBtn.textContent = t('langBtn');
-  // refresh coach if visible
+  syncLangChips();
   const flow = $('coachFlow');
   if (flow?.classList.contains('on') && typeof window.__syzygyPaintCoach === 'function') {
     window.__syzygyPaintCoach();
@@ -148,12 +208,14 @@ export function applyDom() {
 }
 
 export function setLang(next) {
-  lang = next === 'fr' ? 'fr' : 'en';
+  lang = LANGS.includes(next) ? next : 'en';
   try { localStorage.setItem('syzygy_lang', lang); } catch (_) {}
   applyDom();
   return lang;
 }
 
+/** Cycle EN → FR → ES → EN (corner button). */
 export function toggleLang() {
-  return setLang(lang === 'en' ? 'fr' : 'en');
+  const i = LANGS.indexOf(lang);
+  return setLang(LANGS[(i + 1) % LANGS.length]);
 }
