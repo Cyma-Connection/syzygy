@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=b04bonus';
-import { createSpaceAudio } from './audio.js?v=b04bonus';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b04bonus';
-import { createVfx } from './vfx.js?v=b04bonus';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=b04bonus';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b04bonus';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b04bonus';
+import { ASSET } from './assetlib.js?v=b05econ';
+import { createSpaceAudio } from './audio.js?v=b05econ';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b05econ';
+import { createVfx } from './vfx.js?v=b05econ';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=b05econ';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b05econ';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b05econ';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -22,9 +22,9 @@ const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris',
 const BONUS_RELICS_NEED = 4; // easier access to cool bonus stages
 const BONUS_DURATION = 30; // longer bonus stage
 const BONUS_TARGET_COUNT = 5;
-const BONUS_SNAP_FLAT = 600;
-const BONUS_END_FLAT = 1500;
-const BONUS_ENTRY_PTS = 250;
+const BONUS_SNAP_FLAT = 180; // keep 1M rare
+const BONUS_END_FLAT = 350;
+const BONUS_ENTRY_PTS = 75;
 const MAX_LIVES = 5;
 const TEAL = 0x3a9e8a;
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
@@ -185,8 +185,8 @@ function waveParams(w) {
 
 /** Orb point multiplier for current bonusTier (tier1=1.5 … cap 2.25). */
 function bonusOrbMult() {
-  const tier = Math.max(1, bonusTier);
-  return Math.min(2.25, 1.5 + 0.25 * (tier - 1));
+  // Modest climb — frequent 30s bonuses must not print money
+  return Math.min(1.75, 1.25 + 0.12 * Math.max(0, bonusTier - 1));
 }
 
 function perfectBand(w) { return Math.max(0.88, 0.96 - w * 0.005); }
@@ -697,7 +697,7 @@ function enterBonus(portal) {
   const tier = bonusTier;
   const mult = bonusOrbMult();
   // Entry points + consume portal
-  score += BONUS_ENTRY_PTS + (tier - 1) * 50;
+  score += BONUS_ENTRY_PTS + (tier - 1) * 15;
   if (portal) {
     const pos = portal.mesh.position.clone();
     if (vfx) {
@@ -773,9 +773,8 @@ function exitBonus(cleared) {
   state = STATE.PLAY;
   bonusTimer = 0;
 
-  // End bonus points (scale modestly with tier just completed)
-  const tierMult = Math.min(2.25, 1.5 + 0.25 * (Math.max(1, bonusTier) - 1)) / 1.5;
-  const endPts = Math.floor((cleared ? BONUS_END_FLAT + snaps * 200 : Math.floor(BONUS_END_FLAT * 0.35) + snaps * 100) * tierMult);
+  // Modest exit purse — million stays elite (normal run skill, not bonus farm)
+  const endPts = Math.floor(BONUS_END_FLAT + snaps * 40);
   score += endPts;
 
   // +1 life once if ≥3 bonus snaps (cap 5)
@@ -805,25 +804,48 @@ function exitBonus(cleared) {
   publishGame();
 }
 
+function refillBonusOrbs(count) {
+  const need = Math.max(2, count | 0);
+  const used = world.filter((o) => o.kind === KIND.BONUS).map((o) => o.theta);
+  const tier = Math.max(1, bonusTier);
+  for (let i = 0; i < need; i++) {
+    const o = makeObject(KIND.BONUS, false);
+    let theta;
+    let tries = 0;
+    do {
+      theta = craftTheta + Math.random() * Math.PI * 2;
+      tries++;
+    } while (tries < 10 && used.some((a) => angDiff(a, theta) < 0.35));
+    used.push(theta);
+    o.theta = theta;
+    const tight = Math.min(10, (tier - 1) * 3);
+    o.radius = INNER_MIN + 8 + tight * 0.3 + Math.random() * Math.max(8, (INNER_MAX - INNER_MIN - 10 - tight));
+    o.y = (Math.random() - 0.5) * (6 - Math.min(2, tier - 1));
+    o.spin = 1.4 + Math.random() + (tier - 1) * 0.15;
+    place(o.mesh, o.theta, o.radius, o.y);
+    world.push(o);
+  }
+}
+
 function tickBonus(dt) {
   if (!bonusActive) return;
   bonusTimer -= dt;
   if (bonusGroup) bonusGroup.rotation.y += dt * 0.15;
-  // Spin portal-style rings on bonus orbs already handled in frame
+  // MUST last full 30s — clearing orbs only refreshes targets, never exits early
   if (bonusTimer <= 0) {
-    exitBonus(false);
+    exitBonus(bonusSnaps >= bonusOrbGoal);
     return;
   }
   const left = world.filter((o) => o.kind === KIND.BONUS).length;
-  if (left === 0) exitBonus(true);
+  if (left === 0) refillBonusOrbs(Math.min(4, 2 + Math.min(2, bonusTier)));
 }
 
 function doBonusSnap(target) {
-  const pts = Math.floor(BONUS_SNAP_FLAT * bonusOrbMult());
-  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.05));
+  // Flat-ish bonus scoring (no combo/wave snowball) — frequent 30s stages stay fair
+  const gained = Math.floor(BONUS_SNAP_FLAT * bonusOrbMult());
   score += gained;
   bonusSnaps += 1;
-  combo += 1;
+  combo = Math.min(combo + 1, 8);
   bestCombo = Math.max(bestCombo, combo);
 
   audio.stingPerfect?.() || audio.stingGood?.();
@@ -844,8 +866,9 @@ function doBonusSnap(target) {
     showCombo(t('bonusLife'));
   }
   updateHud();
+  // Keep the universe going for the full 30s
   if (world.filter((o) => o.kind === KIND.BONUS).length === 0) {
-    exitBonus(true);
+    refillBonusOrbs(Math.min(4, 2 + Math.min(2, bonusTier)));
   }
 }
 
@@ -894,18 +917,18 @@ function doSnap() {
   let grade = 'OK';
   let pts = 200;
   if (align >= perf) {
-    grade = 'PERFECT'; pts = 1000; combo += 1; perfectStreak += 1;
+    grade = 'PERFECT'; pts = 750; combo += 1; perfectStreak += 1;
     lockStreak += 1;
   } else if (align >= good) {
-    grade = 'GOOD'; pts = 500; combo += 1; perfectStreak = 0; lockStreak = 0;
+    grade = 'GOOD'; pts = 380; combo += 1; perfectStreak = 0; lockStreak = 0;
   } else {
-    grade = 'OK'; pts = 200; combo = 0; perfectStreak = 0; lockStreak = 0;
+    grade = 'OK'; pts = 140; combo = 0; perfectStreak = 0; lockStreak = 0;
   }
 
   updateHeat();
   const { bonus, tags } = stackBonus(target);
   const heatMult = heatOn ? 2 : 1;
-  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.08) * heatMult * bonus);
+  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.05) * heatMult * bonus);
   score += gained;
   bestCombo = Math.max(bestCombo, combo);
   snapsInWave += 1;

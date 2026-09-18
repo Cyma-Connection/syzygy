@@ -154,22 +154,22 @@ export function createSpaceAudio() {
     const deg = [0, 3, 7, 12];
     for (let i = 0; i < deg.length; i++) {
       const f = root * Math.pow(2, deg[i] / 12);
-      // Bonus: keep sine/triangle — warmer, less harsh synth
-      const typ = i < 2 ? 'sine' : 'triangle';
-      const g = bonusMode ? (0.14 - i * 0.02) : (0.12 - i * 0.02);
-      beep(f, when + i * 0.01, bonusMode ? 0.65 : 0.55, typ, g, leadGain);
+      // Bonus: sine bed + soft saw on top voices (grave + a bit synth)
+      const typ = bonusMode ? (i < 2 ? 'sine' : 'sawtooth') : (i < 2 ? 'sine' : 'triangle');
+      const g = bonusMode ? (0.13 - i * 0.018) : (0.12 - i * 0.02);
+      beep(f, when + i * 0.01, bonusMode ? 0.6 : 0.55, typ, g, leadGain);
     }
   }
 
   function melodyNote(when, deg, gain) {
     const root = rootHz();
     const f = root * Math.pow(2, deg / 12);
-    const lead = 'sine';
-    const spark = 'triangle';
-    // Bonus: slightly longer, quieter sparkle (grave feel)
-    const g = bonusMode ? gain * 0.9 : gain;
-    beep(f, when, bonusMode ? 0.34 : 0.28, lead, g, leadGain);
-    beep(f * 2, when + 0.02, bonusMode ? 0.14 : 0.2, spark, gain * (bonusMode ? 0.18 : 0.35), leadGain);
+    // Normal: sine. Bonus: keep grave root + light saw edge (still deep, a bit more synth)
+    const lead = bonusMode ? 'triangle' : 'sine';
+    const spark = bonusMode ? 'sawtooth' : 'triangle';
+    const g = bonusMode ? gain * 0.85 : gain;
+    beep(f, when, bonusMode ? 0.32 : 0.28, lead, g, leadGain);
+    beep(f * 2, when + 0.02, bonusMode ? 0.12 : 0.2, spark, gain * (bonusMode ? 0.16 : 0.35), leadGain);
   }
 
   function scheduleBar() {
