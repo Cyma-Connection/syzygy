@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=b01bonus';
-import { createSpaceAudio } from './audio.js?v=b01bonus';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b01bonus';
-import { createVfx } from './vfx.js?v=b01bonus';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb } from './objects.js?v=b01bonus';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b01bonus';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b01bonus';
+import { ASSET } from './assetlib.js?v=b02bonus';
+import { createSpaceAudio } from './audio.js?v=b02bonus';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b02bonus';
+import { createVfx } from './vfx.js?v=b02bonus';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb } from './objects.js?v=b02bonus';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b02bonus';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b02bonus';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -20,8 +20,8 @@ const BAD = 0xff4d6a;
 const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', BONUS: 'BONUS', OVER: 'OVER' };
 const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', PORTAL: 'portal', BONUS: 'bonus' };
 const BONUS_RELICS_NEED = 7;
-const BONUS_DURATION = 10; // seconds (8–12 micro-bonus)
-const BONUS_TARGET_COUNT = 4;
+const BONUS_DURATION = 16; // longer micro-bonus (~16s)
+const BONUS_TARGET_COUNT = 5;
 const BONUS_SNAP_FLAT = 600;
 const BONUS_END_FLAT = 1500;
 const BONUS_ENTRY_PTS = 250;
@@ -709,6 +709,7 @@ function enterBonus(portal) {
   flash('flash');
   camPunch = 0.28;
   audio.stingWave?.();
+  audio.setBonusMode?.(true);
   updateHud();
   publishGame();
 }
@@ -741,6 +742,7 @@ function exitBonus(cleared) {
   applyBonusLook(false);
   if (sun) sun.visible = true;
   if (sunGlow) sunGlow.visible = true;
+  audio.setBonusMode?.(false);
 
   // Preserve wave progress; respawn field for current wave
   spawnWaveField();
@@ -1061,6 +1063,7 @@ function startRun() {
   lockStreak = 0;
   lockReverseLeft = 0;
   slowMo = 0;
+  audio.setBonusMode?.(false);
   updateHeatVisual();
   $('start')?.classList.remove('on');
   $('board')?.classList.remove('on');

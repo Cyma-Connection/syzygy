@@ -20,6 +20,7 @@ export function createSpaceAudio() {
   let step = 0;
   let waveLayer = 1;
   let speedNorm = 0.4;
+  let bonusMode = false;
   let alignOsc, alignGain;
 
   // Audible on tiny speakers: A3 and up
@@ -29,8 +30,8 @@ export function createSpaceAudio() {
 
   /** Same notes, lower register as the run gets intense. */
   function transposeSemis() {
-    // Locked to base register — no deepening with waves
-    return 0;
+    // Bonus: same intervals, lifted a fifth + synth timbre (setBonusMode)
+    return bonusMode ? 7 : 0;
   }
 
   function rootHz() {
@@ -153,16 +154,18 @@ export function createSpaceAudio() {
     const deg = [0, 3, 7, 12];
     for (let i = 0; i < deg.length; i++) {
       const f = root * Math.pow(2, deg[i] / 12);
-      beep(f, when + i * 0.01, 0.55, i < 2 ? 'sine' : 'triangle', 0.12 - i * 0.02, leadGain);
+      const typ = bonusMode ? (i < 2 ? 'sawtooth' : 'square') : (i < 2 ? 'sine' : 'triangle');
+      beep(f, when + i * 0.01, bonusMode ? 0.4 : 0.55, typ, (bonusMode ? 0.1 : 0.12) - i * 0.02, leadGain);
     }
   }
 
   function melodyNote(when, deg, gain) {
     const root = rootHz();
     const f = root * Math.pow(2, deg / 12);
-    beep(f, when, 0.28, 'sine', gain, leadGain);
-    // sparkle stays one octave above current root (still "same notes")
-    beep(f * 2, when + 0.02, 0.2, 'triangle', gain * 0.35, leadGain);
+    const lead = bonusMode ? 'sawtooth' : 'sine';
+    const spark = bonusMode ? 'square' : 'triangle';
+    beep(f, when, bonusMode ? 0.22 : 0.28, lead, bonusMode ? gain * 0.85 : gain, leadGain);
+    beep(f * 2, when + 0.02, 0.18, spark, gain * (bonusMode ? 0.28 : 0.35), leadGain);
   }
 
   function scheduleBar() {
@@ -328,6 +331,17 @@ export function createSpaceAudio() {
   function stingAutoAlign() { stingLock(); }
   function stingExplosion() { stingBoom(); }
 
+  /** Same song, brighter synth tonality during micro-bonus. */
+  function setBonusMode(on) {
+    bonusMode = !!on;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    applyPadTranspose();
+    if (leadGain) leadGain.gain.setTargetAtTime(bonusMode ? 0.52 : 0.42, t, 0.25);
+    if (padGain) padGain.gain.setTargetAtTime(bonusMode ? 0.14 : 0.10, t, 0.25);
+    if (bassOsc) bassOsc.type = bonusMode ? 'triangle' : 'sine';
+  }
+
   return {
     start,
     setWave,
@@ -347,6 +361,7 @@ export function createSpaceAudio() {
     stingBoom,
     stingAutoAlign,
     stingExplosion,
+    setBonusMode,
     get muted() { return muted; },
     get ctxState() { return ctx ? ctx.state : 'none'; },
     transposeSemis,
