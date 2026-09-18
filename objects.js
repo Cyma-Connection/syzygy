@@ -215,6 +215,65 @@ export function createDebris(scale = 1) {
   return g;
 }
 
+/** Small green/teal repair kit toolbox — safe to SNAP (collect, no damage). */
+export function createKit(scale = 1) {
+  const g = new THREE.Group();
+  g.name = 'kit';
+  const KIT_TEAL = 0x3a9e8a;
+  const KIT_LT = 0x5ec4a8;
+  const KIT_DK = 0x1e5a4a;
+  // Toolbox body
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4 * scale, 1.55 * scale, 1.7 * scale),
+    mat(KIT_TEAL, { metal: 0.45, rough: 0.42, emissive: KIT_DK, ei: 0.35 })
+  );
+  g.add(box);
+  // Lid ridge
+  const lid = new THREE.Mesh(
+    new THREE.BoxGeometry(2.55 * scale, 0.35 * scale, 1.85 * scale),
+    mat(KIT_LT, { metal: 0.5, rough: 0.38, emissive: KIT_TEAL, ei: 0.45 })
+  );
+  lid.position.y = 0.95 * scale;
+  g.add(lid);
+  // Handle
+  const handle = new THREE.Mesh(
+    new THREE.TorusGeometry(0.55 * scale, 0.12 * scale, 6, 14, Math.PI),
+    mat(BONE, { metal: 0.55, rough: 0.4, emissive: KIT_LT, ei: 0.25 })
+  );
+  handle.rotation.x = Math.PI / 2;
+  handle.position.y = 1.35 * scale;
+  g.add(handle);
+  // Cross / plus mark (heal cue)
+  const barH = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1 * scale, 0.22 * scale, 0.18 * scale),
+    new THREE.MeshBasicMaterial({
+      color: KIT_LT,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  barH.position.set(0, 0.15 * scale, 0.92 * scale);
+  g.add(barH);
+  const barV = barH.clone();
+  barV.scale.set(0.22 / 1.1, 1.1 / 0.22, 1);
+  g.add(barV);
+  // Soft glow halo
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(1.9 * scale, 12, 10),
+    new THREE.MeshBasicMaterial({
+      color: KIT_TEAL,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  g.add(halo);
+  return g;
+}
+
 export const OBJECT_COLORS = { AMBER, COLD, BRASS, BRASS_DK, OBSIDIAN, BONE, EMBER, TEAL: 0x3a9e8a };
 
 const TEAL = 0x3a9e8a;

@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=b06portal';
-import { createSpaceAudio } from './audio.js?v=b06portal';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b06portal';
-import { createVfx } from './vfx.js?v=b06portal';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=b06portal';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b06portal';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b06portal';
+import { ASSET } from './assetlib.js?v=altfix1';
+import { createSpaceAudio } from './audio.js?v=altfix1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=altfix1';
+import { createVfx } from './vfx.js?v=altfix1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=altfix1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=altfix1';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=altfix1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -18,7 +18,7 @@ const GOOD = 0x5ad67a;
 const BAD = 0xff4d6a;
 
 const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', BONUS: 'BONUS', OVER: 'OVER' };
-const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', PORTAL: 'portal', BONUS: 'bonus' };
+const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', PORTAL: 'portal', BONUS: 'bonus', KIT: 'kit' };
 const BONUS_RELICS_NEED = 4; // easier access to cool bonus stages
 const BONUS_DURATION = 30; // longer bonus stage
 const BONUS_TARGET_COUNT = 5;
@@ -29,10 +29,8 @@ const MAX_LIVES = 5;
 const TEAL = 0x3a9e8a;
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
 const CRAFT_R = 95;
-/** LOCK = brief alignment freeze (~0.6s): soft-lock toward best non-debris syzygy. NOT reverse, NOT bonus. */
-const LOCK_FREEZE_SEC = 0.6;
-const LOCK_STREAK_NEED = 3; // same beat as HEAT — readable charge, not ultra-rare
-const LOCK_SOFT_RAD_S = 2.6; // soft-lock angular speed (rad/s) toward target
+/** FIX = repair kits. Collect KIND.KIT in field; KIT_NEED charged → Space/button heals +1 hull. */
+const KIT_NEED = 3;
 const INNER_MIN = 42;
 const INNER_MAX = 82; // always < CRAFT_R so object is on sun→craft segment
 
@@ -78,12 +76,7 @@ let sunScale = 1;
 let sunBaseScale = 1;
 let syzygyGuide = null;
 
-let autoAlignReady = false;
-let autoAlignActive = false;
-let autoAlignUnlocked = false;
-let lockStreak = 0; // "Perfect"s toward one LOCK charge
-let lockFreezeLeft = 0; // seconds of alignment freeze remaining
-let lockTargetTheta = null; // soft-lock aim (best non-debris)
+let kits = 0; // FIX kits collected toward KIT_NEED (cap at need)
 
 /** Micro-bonus portal (4 relic SNAPs → geometric stage). Persists across waves. */
 let relicsCollected = 0;
@@ -242,21 +235,19 @@ function updateHud() {
 
   const aa = $('btnAutoAlign');
   if (aa) {
-    const charged = autoAlignReady && !autoAlignActive;
-    aa.classList.toggle('locked', !charged && !autoAlignActive);
+    const charged = kits >= KIT_NEED;
+    aa.classList.toggle('locked', !charged);
     aa.classList.toggle('ready', charged);
-    aa.classList.toggle('active', autoAlignActive);
+    aa.classList.toggle('active', false);
     aa.classList.toggle('cd', false);
     aa.disabled = false; // never HTML-disabled — we gate in JS + show hint if empty
-    if (autoAlignActive) aa.textContent = t('sync');
-    else if (charged) aa.textContent = t('lock');
-    else aa.textContent = `${t('lock')} ${lockStreak}/${LOCK_STREAK_NEED}`;
+    // Preserve charge bar span inside the button
     const charge = $('autoCharge');
+    const label = charged ? t('fix') : t('fixNeed', kits, KIT_NEED);
+    aa.textContent = label;
     if (charge) {
-      let pct = 0;
-      if (autoAlignActive) pct = Math.max(0, Math.min(100, (lockFreezeLeft / LOCK_FREEZE_SEC) * 100));
-      else if (autoAlignReady) pct = 100;
-      else pct = Math.min(100, (lockStreak / LOCK_STREAK_NEED) * 100);
+      aa.appendChild(charge);
+      const pct = Math.min(100, (kits / KIT_NEED) * 100);
       charge.style.width = `${pct}%`;
     }
   }
@@ -284,7 +275,7 @@ function setHint(t) { setText('hint', t); }
 let coachIdx = 0;
 
 function showStartOrCoach() {
-  const seen = localStorage.getItem('syzygy_coach_v2') === '1';
+  const seen = localStorage.getItem('syzygy_coach_v3') === '1';
   if (seen) {
     $('coachFlow')?.classList.remove('on');
     $('start')?.classList.add('on');
@@ -343,7 +334,7 @@ function advanceCoach() {
   audio.start();
   coachIdx += 1;
   if (coachIdx >= coachScreens().length) {
-    localStorage.setItem('syzygy_coach_v2', '1');
+    localStorage.setItem('syzygy_coach_v3', '1');
     $('coachFlow')?.classList.remove('on');
     if (helpReturnTo === 'hud') {
       $('hud')?.classList.add('on');
@@ -377,7 +368,7 @@ function clearWorld() {
 }
 
 function countScoring() {
-  return world.filter((o) => o.kind !== KIND.DEBRIS && o.kind !== KIND.PORTAL && o.kind !== KIND.BONUS).length;
+  return world.filter((o) => o.kind !== KIND.DEBRIS && o.kind !== KIND.PORTAL && o.kind !== KIND.BONUS && o.kind !== KIND.KIT).length;
 }
 
 function pickKind(boss) {
@@ -391,9 +382,11 @@ function pickKind(boss) {
     return KIND.STAR;
   }
   const r = Math.random();
-  if (r < p.debrisChance) return KIND.DEBRIS;
-  if (r < p.debrisChance + 0.2) return KIND.PLANET;
-  if (r < p.debrisChance + 0.38) return KIND.STAR;
+  // Occasional FIX kits (safe collectibles) so FIX charge stays reachable
+  if (r < 0.09) return KIND.KIT;
+  if (r < 0.09 + p.debrisChance) return KIND.DEBRIS;
+  if (r < 0.09 + p.debrisChance + 0.18) return KIND.PLANET;
+  if (r < 0.09 + p.debrisChance + 0.36) return KIND.STAR;
   return KIND.RELIC;
 }
 
@@ -445,6 +438,8 @@ function makeObject(kind, boss) {
     mesh = createPortal(1.25);
   } else if (kind === KIND.BONUS) {
     mesh = createBonusOrb(0.95 + Math.random() * 0.2, Math.max(1, bonusTier));
+  } else if (kind === KIND.KIT) {
+    mesh = createKit(0.85 + Math.random() * 0.2);
   } else {
     mesh = createDebris(0.95 + Math.random() * 0.45);
   }
@@ -575,7 +570,7 @@ function stackBonus(primary) {
   let bonus = 1;
   const tags = [];
   for (const o of world) {
-    if (o === primary || o.kind === KIND.DEBRIS || o.kind === KIND.PORTAL || o.kind === KIND.BONUS) continue;
+    if (o === primary || o.kind === KIND.DEBRIS || o.kind === KIND.PORTAL || o.kind === KIND.BONUS || o.kind === KIND.KIT) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) {
       if (o.kind === KIND.PLANET) { bonus += 0.5; tags.push('PLANET'); }
@@ -603,7 +598,6 @@ function failLife(reason) {
   flashHp();
   combo = 0;
   perfectStreak = 0;
-  lockStreak = 0;
   heatOn = false;
   updateHeatVisual();
   audio.stingMiss();
@@ -748,6 +742,9 @@ function enterBonus(portal) {
     world.push(o);
   }
 
+  // Hostile alternate world: seed debris among orbs (SNAP debris = lose life)
+  ensureBonusDebris(2 + Math.min(2, tier - 1));
+
   // Music first — deep bonus tonality heard immediately
   audio.start();
   audio.setBonusMode?.(true);
@@ -798,6 +795,32 @@ function exitBonus(cleared) {
   publishGame();
 }
 
+function ensureBonusDebris(want = 2) {
+  if (!bonusActive) return;
+  const target = Math.max(1, want | 0);
+  let have = world.filter((o) => o.kind === KIND.DEBRIS).length;
+  const used = world.map((o) => o.theta);
+  const tier = Math.max(1, bonusTier);
+  while (have < target) {
+    const o = makeObject(KIND.DEBRIS, false);
+    let theta;
+    let tries = 0;
+    do {
+      theta = craftTheta + Math.random() * Math.PI * 2;
+      tries++;
+    } while (tries < 12 && used.some((a) => angDiff(a, theta) < 0.3));
+    used.push(theta);
+    o.theta = theta;
+    const tight = Math.min(10, (tier - 1) * 3);
+    o.radius = INNER_MIN + 6 + Math.random() * Math.max(10, (INNER_MAX - INNER_MIN - 8 - tight));
+    o.y = (Math.random() - 0.5) * 8;
+    o.spin = 1.6 + Math.random();
+    place(o.mesh, o.theta, o.radius, o.y);
+    world.push(o);
+    have += 1;
+  }
+}
+
 function refillBonusOrbs(count) {
   const need = Math.max(2, count | 0);
   const used = world.filter((o) => o.kind === KIND.BONUS).map((o) => o.theta);
@@ -819,6 +842,8 @@ function refillBonusOrbs(count) {
     place(o.mesh, o.theta, o.radius, o.y);
     world.push(o);
   }
+  // Keep alternate world hostile — refill a few debris with the orbs
+  ensureBonusDebris(2 + Math.min(2, tier - 1));
 }
 
 function tickBonus(dt) {
@@ -892,24 +917,44 @@ function doSnap() {
     return;
   }
 
-  if (target.kind === KIND.BONUS || bonusActive) {
-    if (target.kind === KIND.BONUS) doBonusSnap(target);
-    else failLife('WEAK ALIGN');
-    return;
-  }
-
+  // Debris hurts in normal play AND alternate world
   if (target.kind === KIND.DEBRIS) {
     if (audio.stingDebris) audio.stingDebris(); else audio.stingMiss();
-    // distinct bad FX
-        flash('miss');
+    flash('miss');
     camShake = 0.55;
     if (vfx) {
       vfx.shatterAt(target.mesh.position.clone(), BAD, 16, 1.1);
       vfx.lockBurst(target.mesh.position.clone(), BAD);
     }
     removeObject(target);
-    refillObject();
+    if (bonusActive) ensureBonusDebris(2 + Math.min(2, Math.max(0, bonusTier - 1)));
+    else refillObject();
     failLife('DÉBRIS!');
+    return;
+  }
+
+  // FIX kits — safe collect (normal play)
+  if (target.kind === KIND.KIT) {
+    const pos = target.mesh.position.clone();
+    removeObject(target);
+    refillObject();
+    kits = Math.min(KIT_NEED, kits + 1);
+    audio.stingGood?.() || audio.stingOk?.();
+    if (vfx) {
+      vfx.shatterAt(pos, TEAL, 12, 0.9);
+      vfx.lockBurst?.(pos, GOOD);
+    }
+    showCombo(kits >= KIT_NEED ? t('fixCharged') : t('kitGet'));
+    setHint(kits >= KIT_NEED ? t('fixReady') : t('fixNeed', kits, KIT_NEED));
+    flash('flash');
+    camPunch = 0.12;
+    updateHud();
+    return;
+  }
+
+  if (target.kind === KIND.BONUS || bonusActive) {
+    if (target.kind === KIND.BONUS) doBonusSnap(target);
+    else failLife('WEAK ALIGN');
     return;
   }
 
@@ -917,11 +962,10 @@ function doSnap() {
   let pts = 200;
   if (align >= perf) {
     grade = 'PERFECT'; pts = 750; combo += 1; perfectStreak += 1;
-    lockStreak += 1;
   } else if (align >= good) {
-    grade = 'GOOD'; pts = 380; combo += 1; perfectStreak = 0; lockStreak = 0;
+    grade = 'GOOD'; pts = 380; combo += 1; perfectStreak = 0;
   } else {
-    grade = 'OK'; pts = 140; combo = 0; perfectStreak = 0; lockStreak = 0;
+    grade = 'OK'; pts = 140; combo = 0; perfectStreak = 0;
   }
 
   updateHeat();
@@ -965,7 +1009,7 @@ function doSnap() {
   // Consume primary; also consume stacked allies on the ray for juice
   const toRemove = [target];
   for (const o of world) {
-    if (o === target || o.kind === KIND.DEBRIS || o.kind === KIND.PORTAL || o.kind === KIND.BONUS) continue;
+    if (o === target || o.kind === KIND.DEBRIS || o.kind === KIND.PORTAL || o.kind === KIND.BONUS || o.kind === KIND.KIT) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) toRemove.push(o);
   }
@@ -983,15 +1027,6 @@ function updateHeat() {
     heatOn = true;
   } else {
     heatOn = false;
-  }
-  // LOCK: one charge after LOCK_STREAK_NEED consecutive "Perfect"s
-  if (lockStreak >= LOCK_STREAK_NEED && !autoAlignReady && !autoAlignActive) {
-    autoAlignUnlocked = true;
-    autoAlignReady = true;
-    lockStreak = 0;
-    showCombo(t('lockUnlocked'));
-    setHint(t('lockReady'));
-    updateHud();
   }
   updateHeatVisual();
 }
@@ -1067,58 +1102,29 @@ function applySunGrowth() {
 }
 
 
-function pickLockTargetTheta() {
-  // Soft-lock toward best non-debris syzygy (relic/planet/star/portal/bonus).
-  let best = null;
-  let bestScore = -1;
-  for (const o of world) {
-    if (!o?.mesh || o.kind === KIND.DEBRIS) continue;
-    if (!isBetweenSunAndCraft(o) && o.kind !== KIND.BONUS) {
-      // still allow slightly off-band objects if closest angularly
-    }
-    const d = angDiff(craftTheta, o.theta);
-    const score = 1 - Math.min(1, d / Math.PI); // closer angle = better
-    // Prefer objects already near the ray
-    const prefer = d < 0.85 ? 0.35 : 0;
-    const s = score + prefer + (o.kind === KIND.RELIC ? 0.05 : 0);
-    if (s > bestScore) {
-      bestScore = s;
-      best = o;
-    }
-  }
-  return best ? best.theta : craftTheta;
-}
-
-function activateAutoAlign() {
+/** Spend 3 FIX kits to repair +1 hull. If hull full: hint only, do not spend. */
+function activateFix() {
   if (!started || over || endingCinematic) return;
   if (state !== STATE.PLAY && state !== STATE.BONUS) return;
-  if (autoAlignActive) return;
-  if (!autoAlignReady) {
-    setHint(`${t('lock')} ${lockStreak}/${LOCK_STREAK_NEED}`);
+  if (kits < KIT_NEED) {
+    setHint(t('fixNeed', kits, KIT_NEED));
     return;
   }
-  autoAlignUnlocked = true;
-  autoAlignActive = true;
-  autoAlignReady = false;
-  lockFreezeLeft = LOCK_FREEZE_SEC;
-  lockTargetTheta = pickLockTargetTheta();
-  audio.stingAutoAlign?.();
-  showCombo(t('lock'));
-  setHint(t('sync')); // HOLD / freeze in motion
-  camPunch = Math.max(camPunch, 0.18);
-  if (vfx && craft) vfx.lockBurst?.(craft.position.clone(), COLD);
-  updateHud();
-}
-
-/** Brief alignment freeze — soft-lock toward best non-debris; time-gated (~0.6s). */
-function tickAutoAlign(dt) {
-  if (!autoAlignActive) return;
-  if (lockFreezeLeft <= 0) {
-    autoAlignActive = false;
-    lockTargetTheta = null;
-    setHint(t('lockDone'));
-    updateHud();
+  if (lives >= MAX_LIVES) {
+    setHint(t('hullFull'));
+    showCombo(t('hullFull'));
+    return;
   }
+  kits -= KIT_NEED;
+  lives = Math.min(MAX_LIVES, lives + 1);
+  audio.stingAutoAlign?.() || audio.stingWave?.();
+  showCombo(t('fixHeal'));
+  setHint(t('fixHeal'));
+  flash('flashPerfect');
+  camPunch = Math.max(camPunch, 0.2);
+  if (vfx && craft) vfx.lockBurst?.(craft.position.clone(), GOOD);
+  updateHud();
+  publishGame();
 }
 
 function goToMenu() {
@@ -1167,12 +1173,7 @@ function startRun() {
   if (sunGlow) sunGlow.visible = true;
   if (craft) craft.visible = true;
   applySunGrowth();
-  autoAlignUnlocked = false;
-  autoAlignReady = false;
-  autoAlignActive = false;
-  lockStreak = 0;
-  lockFreezeLeft = 0;
-  lockTargetTheta = null;
+  kits = 0;
   slowMo = 0;
   audio.setBonusMode?.(false);
   updateHeatVisual();
@@ -1425,7 +1426,7 @@ async function boot() {
   botOn = /(?:\?|&)bot=1(?:&|$)/.test(location.search) || location.hash === '#bot';
   if (botOn) {
     console.info('[SYZYGY] bot playtest ON');
-    localStorage.setItem('syzygy_coach_v2', '1');
+    localStorage.setItem('syzygy_coach_v3', '1');
   }
   publishGame();
 
@@ -1490,17 +1491,17 @@ function bindInput(canvas) {
   }, { passive: false });
 
   $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
-  const lockTap = (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); };
-  $('btnAutoAlign')?.addEventListener('pointerdown', lockTap);
-  $('btnAutoAlign')?.addEventListener('click', lockTap);
-  // Desktop: Space = LOCK (mouse is too slow once orbit speeds up). Ignore when typing in name field.
+  const fixTap = (e) => { e.preventDefault(); e.stopPropagation(); activateFix(); };
+  $('btnAutoAlign')?.addEventListener('pointerdown', fixTap);
+  $('btnAutoAlign')?.addEventListener('click', fixTap);
+  // Desktop: Space = FIX (repair when 3 kits charged). Ignore when typing in name field.
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' && e.key !== ' ') return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
     e.preventDefault();
     if (!started || over || (state !== STATE.PLAY && state !== STATE.BONUS)) return;
-    activateAutoAlign();
+    activateFix();
   });
   $('btnHelp')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -1652,9 +1653,9 @@ function tickBot() {
   if (!bestTarget) return;
   if (bestTarget.kind === KIND.DEBRIS) return;
   if (align >= goodBand(wave)) doSnap();
-  // Bot: spend LOCK freeze when charged and slightly off a good line
-  if (autoAlignUnlocked && autoAlignReady && !autoAlignActive && align >= 0.5 && align < goodBand(wave)) {
-    activateAutoAlign();
+  // Bot: spend FIX when charged and hull damaged
+  if (kits >= KIT_NEED && lives < MAX_LIVES) {
+    activateFix();
   }
 }
 
@@ -1682,6 +1683,7 @@ function publishGame() {
     bonus: bonusActive,
     bonusTier,
     relicsCollected,
+    kits,
   };
 }
 
@@ -1730,22 +1732,8 @@ function frame(now) {
     const within = snapsInWave / Math.max(1, waveParams(wave).perWave);
     const spd = orbitSpeed * (1 + within * 0.12) * (bonusActive ? bonusOrbitBoost : 1);
     audio.setOrbitSpeed?.(spd);
-    if (autoAlignActive && lockFreezeLeft > 0) {
-      // Alignment freeze: no forward orbit; soft-lock toward best non-debris
-      lockFreezeLeft = Math.max(0, lockFreezeLeft - dt);
-      if (lockTargetTheta != null) {
-        const d = Math.atan2(Math.sin(lockTargetTheta - craftTheta), Math.cos(lockTargetTheta - craftTheta));
-        const step = Math.sign(d) * Math.min(Math.abs(d), LOCK_SOFT_RAD_S * dt);
-        craftTheta += step;
-      }
-      if (vfx && craft && Math.random() < dt * 32) {
-        vfx.nearMissBurst?.(craft.position.clone());
-      }
-    } else {
-      craftTheta += orbitDir * spd * dt;
-    }
+    craftTheta += orbitDir * spd * dt;
 
-    tickAutoAlign(dt);
     computeAlignment();
     tickBot();
 
@@ -1765,6 +1753,7 @@ function frame(now) {
       o.mesh.rotation.y += o.spin * dt;
       if (o.kind === KIND.STAR) o.mesh.rotation.z += o.spin * 0.7 * dt;
       if (o.kind === KIND.DEBRIS) o.mesh.rotation.x += o.spin * 1.2 * dt;
+      if (o.kind === KIND.KIT) o.mesh.rotation.z += o.spin * 0.6 * dt;
       if (o.kind === KIND.PORTAL || o.kind === KIND.BONUS) {
         o.mesh.rotation.z += o.spin * 0.5 * dt;
         const rings = o.mesh.userData?.portalRings;
