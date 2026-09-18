@@ -12,7 +12,7 @@
 
 ## 1. One-sentence pitch
 
-**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris), waves, combos, lives, LOCK short reverse (5 Perfect → one charge), pinch-zoom.
+**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris), waves, combos, lives, LOCK short reverse (3 Perfect → one charge), pinch-zoom.
 
 Fantasy skin: you are the last cartographer of a dead orrery (observatory of a dead future civilisation). Keep the fiction; the *feel* must stay arcade-addictive (Angry Birds clarity / Subway Surfers urgency), not contemplative simulation.
 
@@ -39,7 +39,7 @@ Do **not** revert to the contemplative tether loop unless explicitly asked. Alig
 | Alignment | Best angular align craft↔object through sun origin; meter + SNAP pulse/glow + rising audio tone. |
 | SNAP | Debris → lose life + bad FX. Else Perfect/Good/OK × combo × wave; **stack bonus** if planet/star also near same ray. Weak/nothing → life loss. |
 | Wave clear | N successful non-debris snaps → wave++; **sun scale + emissive/brightness persist** for the run. |
-| LOCK (`#btnAutoAlign`) | One charge after 5 "Perfect". Short reverse ~16° on orbit (not auto-snap). Charge bar fills with streak. Label LOCK/REV. Coach screen 4. |
+| LOCK (`#btnAutoAlign`) | One charge after 3 "Perfect". Short reverse ~16° on orbit (not auto-snap). Charge bar fills with streak. Label LOCK/REV. Coach screen 4. |
 | Game over | **5 lives**; lives 0 → big geometric shatter (sun + system) + camera punch, then OVER UI. |
 | Coach | 3 screens: ORBIT / FEEL ALIGN / SNAP (debris danger). Flag `syzygy_coach_v1`. |
 | Extras | Near-miss sparks, heat amber trail, boss every 5 waves (denser debris + big relic), Perfect slow-mo. |

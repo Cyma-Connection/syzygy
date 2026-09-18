@@ -160,7 +160,7 @@
       #snapBtn { width:104px; height:104px; }
       #controls { gap:14px; }
     }
-    #btnAutoAlign.locked { opacity:.35; border-color:#445; color:#667; }
+    #btnAutoAlign.locked { opacity:.55; border-color:#445; color:#889; pointer-events:auto; }
     #btnAutoAlign.ready { border-color:var(--cold); box-shadow:0 0 28px rgba(107,140,255,.45);
       animation: pulseSnap 0.9s ease-in-out infinite; }
     #btnAutoAlign.active { border-color:var(--good); color:var(--good); box-shadow:0 0 32px rgba(90,214,122,.4); }
@@ -204,7 +204,7 @@
 
   <div id="start" class="screen">
     <h2 id="startTitle">ORBIT SNAP</h2>
-    <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 5 "Perfect" charge <b style="color:var(--cold)">LOCK</b> (short reverse). Pinch = zoom.</p>
+    <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 "Perfect" charge <b style="color:var(--cold)">LOCK</b> (short reverse). Pinch = zoom.</p>
     <div id="langRow">
       <div id="langLabel">LANGUAGE</div>
       <button type="button" class="langChip on" id="lang_en" data-lang="en">EN</button>
@@ -254,7 +254,7 @@
       <div id="meterLabel">ALIGNMENT</div>
     </div>
     <div id="controls">
-      <button id="btnAutoAlign" type="button" class="locked" title="LOCK — short reverse (5 Perfect)">LOCK<span id="autoCharge"></span></button>
+      <button id="btnAutoAlign" type="button" class="locked" title="LOCK — short reverse (3 Perfect)">LOCK<span id="autoCharge"></span></button>
       <button id="snapBtn" type="button">SNAP</button>
     </div>
   </div>

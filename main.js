@@ -22,8 +22,8 @@ const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris' 
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
 const CRAFT_R = 95;
 /** LOCK reverse arc (~16°) — clutch, not full undo. */
-const LOCK_REVERSE_RAD = 0.28;
-const LOCK_STREAK_NEED = 5;
+const LOCK_REVERSE_RAD = 0.36; // ~21° — readable clutch without full undo
+const LOCK_STREAK_NEED = 3; // same beat as HEAT — readable charge, not ultra-rare
 const INNER_MIN = 42;
 const INNER_MAX = 82; // always < CRAFT_R so object is on sun→craft segment
 
@@ -173,13 +173,15 @@ function updateHud() {
 
   const aa = $('btnAutoAlign');
   if (aa) {
-    const charged = autoAlignUnlocked && autoAlignReady && !autoAlignActive;
-    aa.classList.toggle('locked', !autoAlignUnlocked || (!autoAlignReady && !autoAlignActive));
+    const charged = autoAlignReady && !autoAlignActive;
+    aa.classList.toggle('locked', !charged && !autoAlignActive);
     aa.classList.toggle('ready', charged);
     aa.classList.toggle('active', autoAlignActive);
     aa.classList.toggle('cd', false);
+    aa.disabled = false; // never HTML-disabled — we gate in JS + show hint if empty
     if (autoAlignActive) aa.textContent = t('sync');
-    else aa.textContent = t('lock');
+    else if (charged) aa.textContent = t('lock');
+    else aa.textContent = `${t('lock')} ${lockStreak}/${LOCK_STREAK_NEED}`;
     const charge = $('autoCharge');
     if (charge) {
       let pct = 0;
@@ -626,13 +628,14 @@ function updateHeat() {
   } else {
     heatOn = false;
   }
-  // LOCK: one charge after LOCK_STREAK_NEED "Perfect"s (separate from heat)
+  // LOCK: one charge after LOCK_STREAK_NEED consecutive "Perfect"s
   if (lockStreak >= LOCK_STREAK_NEED && !autoAlignReady && !autoAlignActive) {
     autoAlignUnlocked = true;
     autoAlignReady = true;
     lockStreak = 0;
     showCombo(t('lockUnlocked'));
     setHint(t('lockReady'));
+    updateHud();
   }
   updateHeatVisual();
 }
@@ -697,14 +700,20 @@ function applySunGrowth() {
 
 function activateAutoAlign() {
   if (!started || over || state !== STATE.PLAY || endingCinematic) return;
-  if (!autoAlignUnlocked || !autoAlignReady || autoAlignActive) return;
+  if (autoAlignActive) return;
+  if (!autoAlignReady) {
+    setHint(`${t('lock')} ${lockStreak}/${LOCK_STREAK_NEED}`);
+    return;
+  }
+  autoAlignUnlocked = true;
   autoAlignActive = true;
   autoAlignReady = false;
   lockReverseLeft = LOCK_REVERSE_RAD;
   audio.stingAutoAlign?.();
   showCombo(t('lock'));
-  setHint(t('lockReady'));
-  camPunch = Math.max(camPunch, 0.12);
+  setHint(t('sync')); // REV in motion
+  camPunch = Math.max(camPunch, 0.18);
+  if (vfx && craft) vfx.lockBurst?.(craft.position.clone(), COLD);
   updateHud();
 }
 
@@ -1070,7 +1079,9 @@ function bindInput(canvas) {
   }, { passive: false });
 
   $('snapBtn')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doSnap(); });
-  $('btnAutoAlign')?.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); });
+  const lockTap = (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); };
+  $('btnAutoAlign')?.addEventListener('pointerdown', lockTap);
+  $('btnAutoAlign')?.addEventListener('click', lockTap);
   $('btnHelp')?.addEventListener('click', (e) => {
     e.preventDefault();
     openHelpCoach();
