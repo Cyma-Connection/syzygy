@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=b02bonus';
-import { createSpaceAudio } from './audio.js?v=b02bonus';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b02bonus';
-import { createVfx } from './vfx.js?v=b02bonus';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb } from './objects.js?v=b02bonus';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b02bonus';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b02bonus';
+import { ASSET } from './assetlib.js?v=b03bonus';
+import { createSpaceAudio } from './audio.js?v=b03bonus';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b03bonus';
+import { createVfx } from './vfx.js?v=b03bonus';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb } from './objects.js?v=b03bonus';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b03bonus';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b03bonus';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -20,7 +20,7 @@ const BAD = 0xff4d6a;
 const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', BONUS: 'BONUS', OVER: 'OVER' };
 const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', PORTAL: 'portal', BONUS: 'bonus' };
 const BONUS_RELICS_NEED = 7;
-const BONUS_DURATION = 16; // longer micro-bonus (~16s)
+const BONUS_DURATION = 30; // longer bonus stage
 const BONUS_TARGET_COUNT = 5;
 const BONUS_SNAP_FLAT = 600;
 const BONUS_END_FLAT = 1500;
@@ -764,7 +764,7 @@ function tickBonus(dt) {
 }
 
 function doBonusSnap(target) {
-  const pts = BONUS_SNAP_FLAT * 2; // double points during bonus
+  const pts = Math.floor(BONUS_SNAP_FLAT * 1.5); // 1.5× during bonus
   const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.05));
   score += gained;
   bonusSnaps += 1;

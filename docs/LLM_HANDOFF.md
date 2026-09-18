@@ -49,7 +49,7 @@ Primary files: `main.js`, `objects.js`, `audio.js`, `index.html`, `spacefx.js` (
 
 ### Micro-bonus portal (2026-09-18)
 - Count successful **relic** SNAPs (`relicsCollected`). At `BONUS_RELICS_NEED` (7) spawn one `KIND.PORTAL` on an inner orbit.
-- SNAP portal → enter ~10s bonus stage (`STATE.BONUS` / `bonusActive`): geometric teal planet, 4 bright orbs, denser VFX, fog/sky tint. Double flat points per bonus snap; +1 life once if ≥3 snaps (cap 5). Auto-exit on timer or clear.
+- SNAP portal → enter ~30s bonus stage (`STATE.BONUS` / `bonusActive`): geometric teal planet, 4 bright orbs, denser VFX, fog/sky tint. Double flat points per bonus snap; +1 life once if ≥3 snaps (cap 5). Auto-exit on timer or clear.
 - Exit restores sun scene, same wave progress, `relicsCollected = 0`. Portal clears if unused after ~1 wave. No free black-hole DODGE. LOCK unchanged.
 - Files: `main.js`, `objects.js` (`createPortal` / `createBonusPlanet` / `createBonusOrb`), `i18n.js`, `vfx.js`, `index.html` (`#bonusTimer`, `?v=b01bonus`).
 
