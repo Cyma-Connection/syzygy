@@ -8,10 +8,10 @@
 ---
 
 ## Pitch court (FR) — recommandé
-**SYZYGY ORBIT SNAP** — dernier cartographe d’un orrery mort. Votre craft orbite seul autour d’un soleil mourant : **sentez** l’alignement Soleil→Objet, puis **SNAP**. Débris = danger. Combos, vagues, **LOCK** (gel d’alignement), portail bonus après 7 reliques. Arcade addictive, esthétique laiton / obsidienne / ambre+froid.
+**SYZYGY ORBIT SNAP** — dernier cartographe d’un orrery mort. Votre craft orbite seul autour d’un soleil mourant : **sentez** l’alignement Soleil→Objet, puis **SNAP**. Débris = danger. Combos, vagues, **LOCK** (gel d’alignement), portail bonus après 4 reliques. Arcade addictive, esthétique laiton / obsidienne / ambre+froid.
 
 ## Short pitch (EN)
-**SYZYGY ORBIT SNAP** — last cartographer of a dead orrery. Your craft auto-orbits a dying sun: **feel** sun→object alignment, then **SNAP**. Debris hurts. Combos, waves, **LOCK** (brief align freeze), portal bonus after 7 relics. Arcade-addictive; brass/obsidian; amber + cold — not neon cyberpunk.
+**SYZYGY ORBIT SNAP** — last cartographer of a dead orrery. Your craft auto-orbits a dying sun: **feel** sun→object alignment, then **SNAP**. Debris hurts. Combos, waves, **LOCK** (brief align freeze), portal bonus after 4 relics. Arcade-addictive; brass/obsidian; amber + cold — not neon cyberpunk.
 
 ---
 
@@ -19,7 +19,7 @@
 1. Watch alignment (meter, SNAP pulse, rising tone).
 2. Tap **SNAP** on Perfect / Good / OK. Avoid **debris**.
 3. Clear 5 snaps per wave; sun grows; difficulty ramps (gentle early, clearer after wave 5–8).
-4. **7 relic SNAPs** → geometric **portal** appears → **SNAP portal** = 30s bonus orbs (tiers stack each entry).
+4. **4 relic SNAPs** → geometric **portal** appears → **SNAP portal** = 30s bonus orbs (tiers stack each entry).
 5. **3 Perfect** → **LOCK** charged → tap LOCK or press **Space** = ~0.6s alignment freeze (soft-lock toward best non-debris). Does **not** open bonus.
 
 ## Controls

@@ -12,7 +12,7 @@
 
 ## 1. One-sentence pitch
 
-**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris/portal), waves, combos, lives, LOCK alignment freeze ~0.6s (3 Perfect → one charge; soft-lock toward best non-debris), portal bonus after 7 relic SNAPs (tiers), pinch/wheel zoom.
+**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris/portal), waves, combos, lives, LOCK alignment freeze ~0.6s (3 Perfect → one charge; soft-lock toward best non-debris), portal bonus after 4 relic SNAPs (tiers), pinch/wheel zoom.
 
 Fantasy skin: you are the last cartographer of a dead orrery (observatory of a dead future civilisation). Keep the fiction; the *feel* must stay arcade-addictive (Angry Birds clarity / Subway Surfers urgency), not contemplative simulation.
 

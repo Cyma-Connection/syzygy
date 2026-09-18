@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=jamwin1';
-import { createSpaceAudio } from './audio.js?v=jamwin1';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=jamwin1';
-import { createVfx } from './vfx.js?v=jamwin1';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=jamwin1';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=jamwin1';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=jamwin1';
+import { ASSET } from './assetlib.js?v=b04bonus';
+import { createSpaceAudio } from './audio.js?v=b04bonus';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b04bonus';
+import { createVfx } from './vfx.js?v=b04bonus';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=b04bonus';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b04bonus';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b04bonus';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -19,7 +19,7 @@ const BAD = 0xff4d6a;
 
 const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', BONUS: 'BONUS', OVER: 'OVER' };
 const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', PORTAL: 'portal', BONUS: 'bonus' };
-const BONUS_RELICS_NEED = 7;
+const BONUS_RELICS_NEED = 4; // easier access to cool bonus stages
 const BONUS_DURATION = 30; // longer bonus stage
 const BONUS_TARGET_COUNT = 5;
 const BONUS_SNAP_FLAT = 600;
@@ -754,12 +754,14 @@ function enterBonus(portal) {
     world.push(o);
   }
 
+  // Music first — deep bonus tonality heard immediately
+  audio.start();
+  audio.setBonusMode?.(true);
   showCombo(t('bonusEnter', tier, mult));
   setHint(t('hintBonus', mult));
   flash('flash');
   camPunch = 0.28;
   audio.stingWave?.();
-  audio.setBonusMode?.(true);
   updateHud();
   publishGame();
 }

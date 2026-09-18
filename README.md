@@ -17,7 +17,7 @@ Dernier cartographe d’un orrery mort : alignez soleils et reliques en **syzygi
 1. Craft orbits alone — watch sun → object alignment (meter / pulse / tone).
 2. **SNAP** at the sweet spot (Perfect / Good / OK). Debris = lose a life.
 3. Clear waves, stack combos, grow the sun. 5 hull lives.
-4. **7 relic SNAPs** open a **portal** — SNAP the portal to enter a **30s bonus** stage (orbs). Each bonus entry in a run raises **bonus tier** (more points, slightly harder, new look).
+4. **4 relic SNAPs** open a **portal** — SNAP the portal to enter a **30s bonus** stage (orbs). Each bonus entry in a run raises **bonus tier** (more points, slightly harder, new look).
 5. **3 Perfect** in a row charge **LOCK** — brief **alignment freeze** (~0.6s): craft soft-locks toward the best non-debris syzygy. LOCK does **not** open the bonus.
 
 ## Controls
