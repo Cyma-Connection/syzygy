@@ -27,3 +27,10 @@ Major pivot (2026-09-12): auto-orbit craft; feel alignment; SNAP. Kept polish (w
 ## Polish (camera + audio mix)
 - Camera: craft anchored **bottom-center** (outside-orbit rail); pinch/wheel zoom to scout ahead.
 - Audio: louder brass-obsidian bed + crystalline arp; SFX bus lowered under music; mute intact.
+
+## 2026-09-18 — mobile lang + mute vs LOCK + dress
+- Start-menu lang chips: pointerdown/touchend/click + `body.menu-open` hides corner Help/Mute/Lang
+- `#btnMute` moved to top bar (help → mute), icons ♪/🔇 — was overlapping **LOCK** (`#btnAutoAlign`) on phones
+- LOCK kept (slightly smaller ≤420px); SNAP stays primary
+- Future (notes only): replace manual LOCK with auto-fire LOCK on 3 Perfect
+- Dress: parallax star layers, sun corona pulse/rings, syzygy sun→object→craft line, menu cut-corner chrome + vignette polish

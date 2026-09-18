@@ -20,7 +20,9 @@
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color:#e6dcc8; user-select:none; }
     canvas { display:block; width:100%; height:100%; }
     #fx { position:fixed; inset:0; z-index:5; pointer-events:none;
-      background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.6) 100%); }
+      background:
+        radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,.45) 72%, rgba(0,0,0,.72) 100%),
+        radial-gradient(ellipse at 50% 42%, rgba(232,160,74,.04), transparent 55%); }
     #fx.flash { animation: flash .35s ease-out; }
     #fx.miss { animation: miss .35s ease-out; }
     @keyframes flash { 0%{box-shadow:inset 0 0 140px rgba(255,255,255,.85)} 35%{box-shadow:inset 0 0 80px rgba(232,160,74,.45)} 100%{box-shadow:inset 0 0 0 transparent} }
@@ -36,26 +38,39 @@
 
     .screen { position:fixed; inset:0; z-index:40; display:none; flex-direction:column; align-items:center;
       justify-content:center; gap:14px; text-align:center; padding:20px;
+      pointer-events:auto;
       background:radial-gradient(ellipse at 50% 35%, rgba(16,20,40,.85), rgba(3,4,10,.96)); }
     .screen.on { display:flex; }
     .screen h2 { margin:0; font-weight:400; letter-spacing:.32em; text-indent:.32em; font-size:clamp(20px,5vw,34px); color:var(--amber); }
     .screen p { margin:0; max-width:380px; font-size:12px; line-height:1.75; color:#8b93a3; letter-spacing:.04em; }
+    /* Thin cut-corner chrome on menu panels */
+    .screen::before {
+      content:""; position:absolute; left:max(12px, env(safe-area-inset-left)); right:max(12px, env(safe-area-inset-right));
+      top:max(12px, env(safe-area-inset-top)); bottom:max(12px, env(safe-area-inset-bottom));
+      pointer-events:none; z-index:0;
+      border:1px solid rgba(232,160,74,.22);
+      clip-path: polygon(0 12px, 12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px));
+      box-shadow: inset 0 0 40px rgba(107,140,255,.06);
+    }
+    .screen > * { position:relative; z-index:1; }
     .btn { pointer-events:auto; padding:14px 28px; border:1px solid #4a5057; background:rgba(16,18,28,.9);
       color:#e6dcc8; font:inherit; font-size:12px; letter-spacing:.2em; cursor:pointer; }
     .btn.primary { border-color:var(--amber); color:var(--amber); }
     .btn:active { transform:scale(.98); }
     .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-    #langRow { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; margin-top:4px; }
+    #langRow { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; margin-top:4px;
+      position:relative; z-index:55; pointer-events:auto; touch-action:manipulation; }
     #langLabel { font-size:10px; letter-spacing:.18em; color:#7a8494; width:100%; text-align:center; margin-bottom:2px; }
-    .langChip { min-width:52px; padding:10px 14px; border:1px solid #4a5057; background:rgba(16,18,28,.9);
-      color:#9aa3b5; font:inherit; font-size:11px; letter-spacing:.16em; cursor:pointer; pointer-events:auto; }
+    .langChip { min-width:52px; min-height:44px; padding:10px 14px; border:1px solid #4a5057; background:rgba(16,18,28,.9);
+      color:#9aa3b5; font:inherit; font-size:11px; letter-spacing:.16em; cursor:pointer;
+      pointer-events:auto; touch-action:manipulation; position:relative; z-index:56; -webkit-user-select:none; user-select:none; }
     .langChip.on { border-color:var(--amber); color:var(--amber); box-shadow:0 0 16px rgba(232,160,74,.25); }
 
     #hud { position:fixed; inset:0; z-index:10; display:none; pointer-events:none; }
     #hud.on { display:block; }
     #top { position:absolute; left:0; right:0; top:max(10px, env(safe-area-inset-top));
       display:flex; justify-content:space-between; align-items:flex-start;
-      padding:0 62px 0 58px; font-size:12px; letter-spacing:.14em;
+      padding:0 62px 0 108px; font-size:12px; letter-spacing:.14em;
       text-shadow:0 2px 8px #000; z-index:12; }
     #scoreBox { color:var(--amber); }
     #waveCol { text-align:center; }
@@ -73,13 +88,19 @@
       top:max(10px, env(safe-area-inset-top)); width:44px; height:44px; border-radius:10px;
       border:1px solid #556; background:rgba(10,12,20,.85); color:#cfd6e6; font:inherit;
       font-size:13px; letter-spacing:.1em; cursor:pointer; z-index:20; }
-    #btnMute { pointer-events:auto; position:absolute; left:max(14px, env(safe-area-inset-left));
-      bottom:max(28px, calc(env(safe-area-inset-bottom) + 18px)); z-index:20;
-      min-width:72px; height:52px; padding:0 14px; border-radius:14px;
-      border:2px solid rgba(232,160,74,.55); background:rgba(10,12,20,.92); color:var(--amber);
-      font:inherit; font-size:13px; letter-spacing:.16em; cursor:pointer;
-      box-shadow:0 0 20px rgba(232,160,74,.2); }
+    /* Mute sits in top bar next to help — never over LOCK (#btnAutoAlign) / SNAP */
+    #btnMute { pointer-events:auto; position:absolute;
+      left:max(58px, calc(env(safe-area-inset-left) + 48px));
+      top:max(10px, env(safe-area-inset-top)); bottom:auto; z-index:20;
+      width:44px; height:44px; min-width:44px; padding:0; border-radius:10px;
+      border:1px solid #556; background:rgba(10,12,20,.85); color:var(--amber);
+      font:inherit; font-size:18px; letter-spacing:0; cursor:pointer;
+      box-shadow:none; line-height:1; display:flex; align-items:center; justify-content:center; }
     #btnMute.off { color:var(--bad); border-color:var(--bad); background:rgba(40,8,14,.92); }
+    /* Hide corner HUD chrome while any menu/load/coach screen is up (mobile tap steal) */
+    body.menu-open #btnLang,
+    body.menu-open #btnMute,
+    body.menu-open #btnHelp { visibility:hidden; pointer-events:none; }
     #coachVisual { font-size:42px; letter-spacing:.2em; color:var(--amber); min-height:52px;
       animation: coachPulse 1.1s ease-in-out infinite; }
     @keyframes coachPulse { 0%,100%{ opacity:.45; transform:translateX(0)} 50%{ opacity:1; transform:translateX(8px)} }
@@ -134,6 +155,11 @@
       border:2px solid rgba(107,140,255,.4); background:radial-gradient(circle at 40% 35%, rgba(107,140,255,.25), rgba(10,12,20,.85));
       color:var(--cold); font:inherit; font-size:11px; letter-spacing:.18em; text-indent:.1em; cursor:pointer;
       box-shadow:0 0 18px rgba(107,140,255,.15); overflow:hidden; margin-bottom:12px; }
+    @media (max-width:420px) {
+      #btnAutoAlign { width:58px; height:58px; font-size:9px; letter-spacing:.12em; margin-bottom:16px; }
+      #snapBtn { width:104px; height:104px; }
+      #controls { gap:14px; }
+    }
     #btnAutoAlign.locked { opacity:.35; border-color:#445; color:#667; }
     #btnAutoAlign.ready { border-color:var(--cold); box-shadow:0 0 28px rgba(107,140,255,.45);
       animation: pulseSnap 0.9s ease-in-out infinite; }
@@ -165,7 +191,7 @@
   <div id="fx"></div>
   <button type="button" id="btnHelp" title="Tutorial">?</button>
   <button type="button" id="btnLang" title="Language">FR</button>
-  <button type="button" id="btnMute" title="Mute">♪ SOUND</button>
+  <button type="button" id="btnMute" title="Mute" aria-label="Mute">♪</button>
 
   <div id="load"><h1>SYZYGY</h1><div id="loadmsg">calibrating ORBIT…</div></div>
 

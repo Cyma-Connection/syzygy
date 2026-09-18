@@ -132,22 +132,55 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
 
   scene.add(group);
 
+  // Parallax layer roots (slow shift with camera / zoom — mobile-cheap)
+  const layerFar = new THREE.Group();
+  const layerMid = new THREE.Group();
+  const layerNear = new THREE.Group();
+  group.add(layerFar);
+  group.add(layerMid);
+  group.add(layerNear);
+  layerFar.add(far);
+  layerMid.add(mid);
+  layerNear.add(near);
+  // dust stays on mid for ecliptic depth
+  layerMid.add(dust);
+
   return {
     group,
     skyMat,
-    update(dt, t) {
+    update(dt, t, opts = {}) {
       skyMat.uniforms.uTime.value = t;
       far.rotation.y += dt * 0.003;
       mid.rotation.y -= dt * 0.005;
       near.rotation.y += dt * 0.008;
       dust.rotation.y += dt * 0.01;
+
+      const z = typeof opts.zoom === 'number' ? opts.zoom : 1;
+      const cx = opts.camX || 0;
+      const cy = opts.camY || 0;
+      const cz = opts.camZ || 0;
+      // Subtle parallax — far least, near most; also nudge with zoom
+      const zoomNudge = (z - 1) * 2.2;
+      layerFar.position.set(cx * 0.012, cy * 0.006 + zoomNudge * 0.15, cz * 0.012);
+      layerMid.position.set(cx * 0.028, cy * 0.014 + zoomNudge * 0.35, cz * 0.028);
+      layerNear.position.set(cx * 0.05, cy * 0.025 + zoomNudge * 0.55, cz * 0.05);
+    },
+    pulseSun(glowGroup, t) {
+      if (!glowGroup) return;
+      const breathe = 0.5 + 0.5 * Math.sin(t * 1.35);
+      glowGroup.traverse((n) => {
+        if (!n.isMesh || !n.material || n.material.opacity == null) return;
+        if (n.userData.baseOpacity == null) n.userData.baseOpacity = n.material.opacity;
+        const k = n.userData.coronaPulse || 0.08;
+        n.material.opacity = Math.min(0.55, n.userData.baseOpacity * (0.92 + breathe * k));
+      });
     },
   };
 }
 
-export function createSunGlow(amber = 0xe8a04a) {
+export function createSunGlow(amber = 0xe8a04a, cold = 0x6b8cff) {
   const g = new THREE.Group();
-  const shell = (scale, opacity, color, seg = 20) => {
+  const shell = (scale, opacity, color, seg = 20, pulse = 0.08) => {
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(scale, seg, Math.max(10, seg - 4)),
       new THREE.MeshBasicMaterial({
@@ -159,13 +192,36 @@ export function createSunGlow(amber = 0xe8a04a) {
         side: THREE.DoubleSide,
       })
     );
+    m.userData.baseOpacity = opacity;
+    m.userData.coronaPulse = pulse;
     return m;
   };
-  // Tight amber corona only — one star, nothing floating above it
-  g.add(shell(19, 0.3, amber, 28));
-  g.add(shell(23, 0.14, amber, 22));
-  g.add(shell(28, 0.07, amber, 18));
-  g.add(shell(34, 0.03, 0xffc078, 16));
+  // Soft corona shells + faint ring planes (grow-from-center via group scale)
+  g.add(shell(19, 0.3, amber, 28, 0.1));
+  g.add(shell(23, 0.14, amber, 22, 0.12));
+  g.add(shell(28, 0.07, amber, 18, 0.14));
+  g.add(shell(34, 0.035, 0xffc078, 16, 0.16));
+  g.add(shell(40, 0.018, cold, 14, 0.1));
+
+  const ring = (inner, outer, opacity, color, tiltX = -Math.PI / 2) => {
+    const m = new THREE.Mesh(
+      new THREE.RingGeometry(inner, outer, 48),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      })
+    );
+    m.rotation.x = tiltX;
+    m.userData.baseOpacity = opacity;
+    m.userData.coronaPulse = 0.18;
+    return m;
+  };
+  g.add(ring(22, 26, 0.08, amber));
+  g.add(ring(30, 36, 0.045, cold));
   return g;
 }
 
@@ -174,10 +230,15 @@ export function createSunGlow(amber = 0xe8a04a) {
 export function growSun(glowGroup, scale = 1) {
   if (!glowGroup) return;
   // Scale is applied by caller on the whole group (uniform). Here: brightness only.
+  // Keep baseOpacity = grown resting opacity so corona pulse does not erase wave growth.
   glowGroup.traverse((n) => {
     if (n.isMesh && n.material && n.material.opacity != null) {
-      if (!n.userData.baseOpacity) n.userData.baseOpacity = n.material.opacity;
-      n.material.opacity = Math.min(0.5, n.userData.baseOpacity * (0.9 + (scale - 1) * 0.45));
+      if (n.userData.origOpacity == null) {
+        n.userData.origOpacity = n.userData.baseOpacity ?? n.material.opacity;
+      }
+      const grown = Math.min(0.5, n.userData.origOpacity * (0.9 + (scale - 1) * 0.45));
+      n.userData.baseOpacity = grown;
+      n.material.opacity = grown;
     }
   });
 }

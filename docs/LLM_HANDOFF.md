@@ -2,10 +2,10 @@
 
 **Purpose of this document:** give another LLM (or coding agent) everything needed to understand, extend, or ambitiously rebuild the game without prior chat context.
 
-**Last updated:** 2026-09-12  
+**Last updated:** 2026-09-18  
 **Current live build:** https://cyma-connection.github.io/syzygy/  
 **Source repo:** https://github.com/Cyma-Connection/syzygy  
-**Latest known commit family:** Polish — synth speed line, visible craft, big KO boom, 5 lives (on ORBIT SNAP core)  
+**Latest known commit family:** Mobile lang chips + mute top-bar (clear of LOCK) + visual dress pack  
 **Jam:** [404 Game Jam](https://game.404.xyz/) — closes **25 Sep 2026, 23:59 UTC**
 
 ---
@@ -44,7 +44,16 @@ Do **not** revert to the contemplative tether loop unless explicitly asked. Alig
 | Coach | 3 screens: ORBIT / FEEL ALIGN / SNAP (debris danger). Flag `syzygy_coach_v1`. |
 | Extras | Near-miss sparks, heat amber trail, boss every 5 waves (denser debris + big relic), Perfect slow-mo. |
 
-Primary files: `main.js`, `objects.js`, `audio.js`, `index.html`, `spacefx.js` (`growSun`), `vfx.js`.
+Primary files: `main.js`, `objects.js`, `audio.js`, `index.html`, `spacefx.js` (`growSun`), `vfx.js`, `i18n.js`.
+
+### Layout / HUD chrome (2026-09-18)
+- Corner `#btnHelp` then `#btnMute` (♪/🔇 ~44px) top-left; `#btnLang` top-right — **in-game only** (`body.menu-open` hides them on start/coach/board/over/load).
+- Mute must **not** sit bottom-left (it overlapped LOCK on smartphones).
+- `#btnAutoAlign` (LOCK) kept; slightly smaller on narrow screens; SNAP remains primary control.
+- Recommended future: auto-fire LOCK after 3 Perfect (remove manual LOCK button) — product note only, not done yet.
+- Start menu language: chips `#lang_en/#lang_fr/#lang_es` with pointerdown/touchend/click; `setLang` + `localStorage syzygy_lang`.
+- Dress: parallax layers in `spacefx.js`, sun corona rings + pulse, craft trail (vfx) + near-syzygy sun→object→craft guide, cut-corner menu frames, softer `#fx` vignette. Corridor HUD still only alignment meter between sun and craft.
+
 
 Do **not** revert to free-aim drag as primary control. Pinch zoom remains.
 

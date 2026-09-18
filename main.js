@@ -89,6 +89,24 @@ let relicPool = [];
 function $(id) { return document.getElementById(id); }
 function setText(id, t) { const el = $(id); if (el) el.textContent = t; }
 
+/** Hide corner #btnLang/#btnMute/#btnHelp while menus steal the screen (mobile). */
+function syncMenuChrome() {
+  const load = $('load');
+  const loadUp = load && !load.classList.contains('gone');
+  const menuUp = ['start', 'coachFlow', 'board', 'over'].some((id) => $(id)?.classList.contains('on'));
+  const open = !!(loadUp || menuUp);
+  document.body.classList.toggle('menu-open', open);
+}
+
+function paintMuteBtn(muted) {
+  const b = $('btnMute');
+  if (!b) return;
+  b.classList.toggle('off', !!muted);
+  b.textContent = muted ? '🔇' : '♪';
+  b.title = t('mute');
+  b.setAttribute('aria-label', t('mute'));
+}
+
 function angDiff(a, b) {
   return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
@@ -196,12 +214,14 @@ function showStartOrCoach() {
   if (seen) {
     $('coachFlow')?.classList.remove('on');
     $('start')?.classList.add('on');
+    syncMenuChrome();
     return;
   }
   $('start')?.classList.remove('on');
   coachIdx = 0;
   paintCoach();
   $('coachFlow')?.classList.add('on');
+  syncMenuChrome();
 }
 
 function paintCoach() {
@@ -231,6 +251,7 @@ function openHelpCoach() {
   coachIdx = 0;
   paintCoach();
   $('coachFlow')?.classList.add('on');
+  syncMenuChrome();
 }
 
 function closeHelpCoach() {
@@ -241,6 +262,7 @@ function closeHelpCoach() {
     $('start')?.classList.add('on');
   }
   helpReturnTo = null;
+  syncMenuChrome();
 }
 
 function advanceCoach() {
@@ -258,9 +280,11 @@ function advanceCoach() {
     } else {
       $('start')?.classList.add('on');
     }
+    syncMenuChrome();
     return;
   }
   paintCoach();
+  syncMenuChrome();
 }
 
 function clearWorld() {
@@ -410,20 +434,28 @@ function removeObject(o) {
 function updateSyzygyGuide() {
   if (!syzygyGuide || !craft) return;
   const pos = craft.position;
-  const arr = syzygyGuide.geometry.attributes.position.array;
-  arr[0] = 0; arr[1] = 0.2; arr[2] = 0;
-  arr[3] = pos.x; arr[4] = pos.y; arr[5] = pos.z;
-  syzygyGuide.geometry.attributes.position.needsUpdate = true;
   const a = align;
   const mat = syzygyGuide.material;
+  const arr = syzygyGuide.geometry.attributes.position.array;
+  // Always 3 verts: sun → mid → craft. Mid = object when near syzygy, else halfway (reads as thin ray).
+  const near = a >= 0.42 && bestTarget && bestTarget.mesh;
+  arr[0] = 0; arr[1] = 0.2; arr[2] = 0;
+  if (near) {
+    const op = bestTarget.mesh.position;
+    arr[3] = op.x; arr[4] = op.y; arr[5] = op.z;
+  } else {
+    arr[3] = pos.x * 0.5; arr[4] = pos.y * 0.5 + 0.1; arr[5] = pos.z * 0.5;
+  }
+  arr[6] = pos.x; arr[7] = pos.y; arr[8] = pos.z;
+  syzygyGuide.geometry.attributes.position.needsUpdate = true;
   if (bestTarget && bestTarget.kind === KIND.DEBRIS && a > 0.5) {
     mat.color.setHex(BAD);
-    mat.opacity = 0.15 + a * 0.55;
+    mat.opacity = 0.18 + a * 0.5;
   } else if (a > 0.45) {
-    mat.color.setHex(a >= goodBand(wave) ? GOOD : COLD);
-    mat.opacity = 0.12 + (a - 0.45) * 0.9;
+    mat.color.setHex(a >= goodBand(wave) ? AMBER : COLD);
+    mat.opacity = 0.14 + (a - 0.45) * 0.85;
   } else {
-    mat.opacity = Math.max(0.04, a * 0.12);
+    mat.opacity = Math.max(0.03, a * 0.1);
     mat.color.setHex(COLD);
   }
 }
@@ -722,6 +754,7 @@ function goToMenu() {
   if (sunGlow) sunGlow.visible = true;
   sunScale = 1;
   applySunGrowth?.();
+  syncMenuChrome();
   publishGame();
 }
 
@@ -750,8 +783,11 @@ function startRun() {
   $('start')?.classList.remove('on');
   $('board')?.classList.remove('on');
   $('over')?.classList.remove('on');
+  $('coachFlow')?.classList.remove('on');
   $('hud')?.classList.add('on');
+  syncMenuChrome();
   updateHud();
+  paintMuteBtn(!!audio.muted);
   audio.start();
   spawnWaveField();
 }
@@ -792,6 +828,7 @@ function endRun() {
   // longer beat before OVER UI so boom lands
   setTimeout(() => {
     $('over')?.classList.add('on');
+    syncMenuChrome();
     setText('overSub', t('overSub', score, wave, bestCombo));
     renderOverRanks();
     const nameIn = $('nameIn');
@@ -871,7 +908,7 @@ async function boot() {
   sun.userData.isSun = true;
   sunBaseScale = 1;
   scene.add(sun);
-  sunGlow = createSunGlow(AMBER);
+  sunGlow = createSunGlow(AMBER, COLD);
   sunGlow.position.set(0, 0, 0);
   scene.add(sunGlow);
   vfx = createVfx(scene, { amber: AMBER, cold: COLD });
@@ -942,7 +979,8 @@ async function boot() {
   // Thin sun→craft ray so players can read true syzygy
   {
     const g = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0.2, 0),
+      new THREE.Vector3(CRAFT_R * 0.5, 0.1, 0),
       new THREE.Vector3(CRAFT_R, 0, 0),
     ]);
     syzygyGuide = new THREE.Line(g, new THREE.LineBasicMaterial({
@@ -973,8 +1011,10 @@ async function boot() {
   publishGame();
 
   applyDom();
+  paintMuteBtn(!!audio.muted);
   $('load')?.classList.add('gone');
   showStartOrCoach();
+  syncMenuChrome();
   $('btnCoachNext')?.addEventListener('click', (e) => { e.preventDefault(); advanceCoach(); });
   requestAnimationFrame(frame);
 }
@@ -1036,27 +1076,50 @@ function bindInput(canvas) {
     e.preventDefault();
     openHelpCoach();
   });
-  $('btnLang')?.addEventListener('click', (e) => {
-    e.preventDefault();
+  // Debounce dual pointerdown+click on iOS so toggleMute / toggleLang do not fire twice
+  const tapGuard = (fn, gap = 320) => {
+    let last = 0;
+    return (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const now = performance.now();
+      if (now - last < gap) return;
+      last = now;
+      fn(e);
+    };
+  };
+
+  const cornerLangTap = tapGuard(() => {
     toggleLang();
     updateHud();
     paintCoach();
+    paintMuteBtn(!!audio.muted);
   });
+  $('btnLang')?.addEventListener('pointerdown', cornerLangTap);
+  $('btnLang')?.addEventListener('click', cornerLangTap);
+
   for (const code of ['en', 'fr', 'es']) {
-    $(`lang_${code}`)?.addEventListener('click', (e) => {
-      e.preventDefault();
+    const el = $(`lang_${code}`);
+    if (!el) continue;
+    const apply = tapGuard(() => {
       setLang(code);
       updateHud();
       paintCoach();
+      paintMuteBtn(!!audio.muted);
     });
+    // iOS/Android: pointerdown + touchend + click; stopPropagation so chrome cannot steal taps
+    el.addEventListener('pointerdown', apply);
+    el.addEventListener('touchend', apply, { passive: false });
+    el.addEventListener('click', apply);
   }
-  $('btnMute')?.addEventListener('click', (e) => {
-    e.preventDefault();
+
+  const muteTap = tapGuard(() => {
     audio.start(); // ensure ctx unlocked even if PLAY was skipped
-    const m = audio.toggleMute();
-    const b = $('btnMute');
-    if (b) { b.classList.toggle('off', m); b.textContent = m ? ('🔇 ' + t('mute')) : '♪ SOUND'; }
+    paintMuteBtn(audio.toggleMute());
   });
+  $('btnMute')?.addEventListener('pointerdown', muteTap);
+  $('btnMute')?.addEventListener('click', muteTap);
+
   $('btnStart')?.addEventListener('click', () => startRun());
   $('btnRetry')?.addEventListener('click', () => startRun());
   $('btnMenu')?.addEventListener('click', () => goToMenu());
@@ -1064,6 +1127,7 @@ function bindInput(canvas) {
   $('btnBack')?.addEventListener('click', () => {
     $('board')?.classList.remove('on');
     $('start')?.classList.add('on');
+    syncMenuChrome();
   });
   $('btnSubmit')?.addEventListener('click', async () => {
     const name = ($('nameIn')?.value || 'ANON').trim().slice(0, 12) || 'ANON';
@@ -1118,6 +1182,7 @@ function renderOverRanks(opts = {}) {
 function openBoard() {
   $('start')?.classList.remove('on');
   $('board')?.classList.add('on');
+  syncMenuChrome();
   const note = $('lbNote');
   if (note) note.textContent = t('lbNote');
   renderBoard(loadLocal());
@@ -1196,7 +1261,21 @@ function frame(now) {
     dt *= 0.35;
   }
 
-  if (spacefx) spacefx.update(dt, clockT);
+  if (spacefx) {
+    spacefx.update(dt, clockT, {
+      zoom,
+      camX: camera?.position.x || 0,
+      camY: camera?.position.y || 0,
+      camZ: camera?.position.z || 0,
+    });
+  }
+  // Soft corona pulse (respects grow-from-center scale)
+  if (sunGlow && sunGlow.visible) {
+    const base = (sunBaseScale || 1) * sunScale;
+    const pulse = 1 + Math.sin(clockT * 1.35) * 0.028;
+    sunGlow.scale.setScalar(base * pulse);
+    if (typeof spacefx?.pulseSun === 'function') spacefx.pulseSun(sunGlow, clockT);
+  }
 
   if (started && !over) {
     playElapsed += raw;
