@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js';
-import { createSpaceAudio } from './audio.js';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js';
-import { createVfx } from './vfx.js';
-import { createPlanet, createStar, createDebris } from './objects.js';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js';
+import { ASSET } from './assetlib.js?v=a19lock';
+import { createSpaceAudio } from './audio.js?v=a19lock';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=a19lock';
+import { createVfx } from './vfx.js?v=a19lock';
+import { createPlanet, createStar, createDebris } from './objects.js?v=a19lock';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=a19lock';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=a19lock';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -1082,6 +1082,15 @@ function bindInput(canvas) {
   const lockTap = (e) => { e.preventDefault(); e.stopPropagation(); activateAutoAlign(); };
   $('btnAutoAlign')?.addEventListener('pointerdown', lockTap);
   $('btnAutoAlign')?.addEventListener('click', lockTap);
+  // Desktop: Space = LOCK (mouse is too slow once orbit speeds up). Ignore when typing in name field.
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
+    e.preventDefault();
+    if (!started || over || state !== STATE.PLAY) return;
+    activateAutoAlign();
+  });
   $('btnHelp')?.addEventListener('click', (e) => {
     e.preventDefault();
     openHelpCoach();
