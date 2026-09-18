@@ -30,8 +30,8 @@ export function createSpaceAudio() {
 
   /** Same notes, lower register as the run gets intense. */
   function transposeSemis() {
-    // Bonus: same intervals, lifted a fifth + synth timbre (setBonusMode)
-    return bonusMode ? 7 : 0;
+    // Bonus: same motif, deeper (perfect fourth down), warmer — not brighter synth
+    return bonusMode ? -5 : 0;
   }
 
   function rootHz() {
@@ -41,12 +41,12 @@ export function createSpaceAudio() {
   function applyPadTranspose() {
     if (!ctx || !padOsc.length) return;
     const t = ctx.currentTime;
-    // Always base pitch (mul=1); speed only accelerates rhythm elsewhere
+    const mul = Math.pow(2, transposeSemis() / 12);
     for (const p of padOsc) {
-      p.o.frequency.setTargetAtTime(p.base, t, 0.5);
+      p.o.frequency.setTargetAtTime(p.base * mul, t, bonusMode ? 0.08 : 0.35);
     }
     if (bassOsc) {
-      bassOsc.frequency.setTargetAtTime(ROOT / 2, t, 0.5);
+      bassOsc.frequency.setTargetAtTime((ROOT / 2) * mul, t, bonusMode ? 0.08 : 0.35);
     }
   }
 
@@ -154,18 +154,22 @@ export function createSpaceAudio() {
     const deg = [0, 3, 7, 12];
     for (let i = 0; i < deg.length; i++) {
       const f = root * Math.pow(2, deg[i] / 12);
-      const typ = bonusMode ? (i < 2 ? 'sawtooth' : 'square') : (i < 2 ? 'sine' : 'triangle');
-      beep(f, when + i * 0.01, bonusMode ? 0.4 : 0.55, typ, (bonusMode ? 0.1 : 0.12) - i * 0.02, leadGain);
+      // Bonus: keep sine/triangle — warmer, less harsh synth
+      const typ = i < 2 ? 'sine' : 'triangle';
+      const g = bonusMode ? (0.14 - i * 0.02) : (0.12 - i * 0.02);
+      beep(f, when + i * 0.01, bonusMode ? 0.65 : 0.55, typ, g, leadGain);
     }
   }
 
   function melodyNote(when, deg, gain) {
     const root = rootHz();
     const f = root * Math.pow(2, deg / 12);
-    const lead = bonusMode ? 'sawtooth' : 'sine';
-    const spark = bonusMode ? 'square' : 'triangle';
-    beep(f, when, bonusMode ? 0.22 : 0.28, lead, bonusMode ? gain * 0.85 : gain, leadGain);
-    beep(f * 2, when + 0.02, 0.18, spark, gain * (bonusMode ? 0.28 : 0.35), leadGain);
+    const lead = 'sine';
+    const spark = 'triangle';
+    // Bonus: slightly longer, quieter sparkle (grave feel)
+    const g = bonusMode ? gain * 0.9 : gain;
+    beep(f, when, bonusMode ? 0.34 : 0.28, lead, g, leadGain);
+    beep(f * 2, when + 0.02, bonusMode ? 0.14 : 0.2, spark, gain * (bonusMode ? 0.18 : 0.35), leadGain);
   }
 
   function scheduleBar() {
@@ -331,15 +335,26 @@ export function createSpaceAudio() {
   function stingAutoAlign() { stingLock(); }
   function stingExplosion() { stingBoom(); }
 
-  /** Same song, brighter synth tonality during micro-bonus. */
+  /** Same song, deeper/warmer tonality during bonus — restart bar immediately. */
   function setBonusMode(on) {
     bonusMode = !!on;
+    ensure();
     if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      const p = ctx.resume();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
     const t = ctx.currentTime;
     applyPadTranspose();
-    if (leadGain) leadGain.gain.setTargetAtTime(bonusMode ? 0.52 : 0.42, t, 0.25);
-    if (padGain) padGain.gain.setTargetAtTime(bonusMode ? 0.14 : 0.10, t, 0.25);
-    if (bassOsc) bassOsc.type = bonusMode ? 'triangle' : 'sine';
+    if (leadGain) leadGain.gain.setTargetAtTime(bonusMode ? 0.38 : 0.42, t, 0.05);
+    if (padGain) padGain.gain.setTargetAtTime(bonusMode ? 0.16 : 0.10, t, 0.05);
+    if (bassGain) bassGain.gain.setTargetAtTime(bonusMode ? 0.14 : 0.08, t, 0.05);
+    if (bassOsc) bassOsc.type = 'sine';
+    // Hear the new tonality NOW — don't wait for the next scheduled bar
+    if (started && !muted) {
+      stopLoop();
+      startLoop();
+    }
   }
 
   return {
