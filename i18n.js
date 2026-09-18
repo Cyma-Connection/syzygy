@@ -52,7 +52,7 @@ const STR = {
   fr: {
     loadmsg: 'calibration ORBIT…',
     startTitle: 'ORBIT SNAP',
-    startBody: 'Ton craft orbite. <b style="color:var(--amber)">Sens</b> l’alignement soleil→objet, puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. 5 "Perfect" chargent <b style="color:var(--cold)">LOCK</b> (marche arrière courte). Pinch = zoom.',
+    startBody: 'Votre vaisseau orbite seul. <b style="color:var(--amber)">Sentez</b> l’alignement Soleil–Objet puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. 5 "perfect" débloquent <b style="color:var(--cold)">LOCK</b>. Pinch = zoom.',
     play: 'JOUER',
     leaderboard: 'CLASSEMENT',
     ranks: 'RANGS',
