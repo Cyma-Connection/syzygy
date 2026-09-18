@@ -59,6 +59,7 @@ let slowMo = 0;
 let camPunch = 0;
 let camShake = 0;
 let perfectStreak = 0;
+let overScoreSaved = false; // one SAVE per run-over screen
 let heatOn = false;
 let isBossWave = false;
 let sunScale = 1;
@@ -830,6 +831,16 @@ function endRun() {
   setTimeout(() => {
     $('over')?.classList.add('on');
     syncMenuChrome();
+    overScoreSaved = false;
+    const submitBtn = $('btnSubmit');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = t('save');
+      submitBtn.style.opacity = '';
+      submitBtn.style.pointerEvents = '';
+    }
+    const nameInReset = $('nameIn');
+    if (nameInReset) nameInReset.readOnly = false;
     setText('overSub', t('overSub', score, wave, bestCombo));
     renderOverRanks();
     const nameIn = $('nameIn');
@@ -845,9 +856,17 @@ function endRun() {
         if (nameIn) nameIn.value = 'Bot 404';
         localStorage.setItem('syzygy_tag', 'Bot 404');
         saveLocal('Bot 404', score, wave);
+        overScoreSaved = true;
         renderOverRanks({ saved: true });
         const btn = $('btnSubmit');
-        if (btn) btn.textContent = t('saved');
+        if (btn) {
+          btn.textContent = t('saved');
+          btn.disabled = true;
+          btn.style.opacity = '0.55';
+          btn.style.pointerEvents = 'none';
+        }
+        const ni = $('nameIn');
+        if (ni) ni.readOnly = true;
         console.info('[SYZYGY] bot saved record as Bot 404', score, 'wave', wave);
       } else {
         console.info('[SYZYGY] bot score', score, 'did not beat', top?.score);
@@ -1131,18 +1150,28 @@ function bindInput(canvas) {
     syncMenuChrome();
   });
   $('btnSubmit')?.addEventListener('click', async () => {
+    if (overScoreSaved) return;
+    const btn = $('btnSubmit');
     const name = ($('nameIn')?.value || 'ANON').trim().slice(0, 12) || 'ANON';
     localStorage.setItem('syzygy_tag', name);
-    $('btnSubmit').textContent = t('saving');
+    overScoreSaved = true; // lock immediately so double-clicks / rewrites cannot spawn extra rows
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = t('saving');
+      btn.style.pointerEvents = 'none';
+    }
+    const nameIn = $('nameIn');
+    if (nameIn) nameIn.readOnly = true;
     try {
-      // submitGlobal → saveLocal once (was double-saving identical rows)
+      // submitGlobal → saveLocal once
       await submitGlobal(name, score, playElapsed, wave);
-      $('btnSubmit').textContent = t('saved');
+      if (btn) btn.textContent = t('saved');
     } catch (err) {
       console.warn(err);
       saveLocal(name, score, wave);
-      $('btnSubmit').textContent = t('localSaved');
+      if (btn) btn.textContent = t('localSaved');
     }
+    if (btn) btn.style.opacity = '0.55';
     renderOverRanks({ saved: true });
   });
 }
