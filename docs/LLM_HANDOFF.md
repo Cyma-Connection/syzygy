@@ -5,14 +5,14 @@
 **Last updated:** 2026-09-18  
 **Current live build:** https://cyma-connection.github.io/syzygy/  
 **Source repo:** https://github.com/Cyma-Connection/syzygy  
-**Latest known commit family:** Micro-bonus portal (7 relics → geometric bonus stage) + prior LOCK/mobile pack  
+**Latest known commit family:** jam-win pack — LOCK = align freeze (~0.6s), bonus tiers, readable silhouettes, gentler early curve, deposit docs (`?v=jamwin1`)  
 **Jam:** [404 Game Jam](https://game.404.xyz/) — closes **25 Sep 2026, 23:59 UTC**
 
 ---
 
 ## 1. One-sentence pitch
 
-**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris), waves, combos, lives, LOCK short reverse (3 Perfect → one charge), pinch-zoom.
+**SYZYGY ORBIT SNAP** is a mobile-first Three.js arcade game: your craft **auto-orbits** a dying sun; you **feel** alignment (meter / pulse / rising tone) then **SNAP** — multi-object rings (relic/planet/star/debris/portal), waves, combos, lives, LOCK alignment freeze ~0.6s (3 Perfect → one charge; soft-lock toward best non-debris), portal bonus after 7 relic SNAPs (tiers), pinch/wheel zoom.
 
 Fantasy skin: you are the last cartographer of a dead orrery (observatory of a dead future civilisation). Keep the fiction; the *feel* must stay arcade-addictive (Angry Birds clarity / Subway Surfers urgency), not contemplative simulation.
 
@@ -39,7 +39,7 @@ Do **not** revert to the contemplative tether loop unless explicitly asked. Alig
 | Alignment | Best angular align craft↔object through sun origin; meter + SNAP pulse/glow + rising audio tone. |
 | SNAP | Debris → lose life + bad FX. Else Perfect/Good/OK × combo × wave; **stack bonus** if planet/star also near same ray. Weak/nothing → life loss. |
 | Wave clear | N successful non-debris snaps → wave++; **sun scale + emissive/brightness persist** for the run. |
-| LOCK (`#btnAutoAlign`) | One charge after 3 "Perfect". Short reverse ~16° on orbit (not auto-snap). Charge bar fills with streak. Label LOCK/REV. Coach screen 4. |
+| LOCK (`#btnAutoAlign` / Space) | One charge after 3 "Perfect". **Brief alignment freeze ~0.6s** — craft soft-locks toward best non-debris syzygy / holds window. **Not** reverse, **not** bonus entry. Charge bar fills with streak. Label LOCK/HOLD. Coach screen 4. |
 | Game over | **5 lives**; lives 0 → big geometric shatter (sun + system) + camera punch, then OVER UI. |
 | Coach | 3 screens: ORBIT / FEEL ALIGN / SNAP (debris danger). Flag `syzygy_coach_v1`. |
 | Extras | Near-miss sparks, heat amber trail, boss every 5 waves (denser debris + big relic), Perfect slow-mo. |
@@ -47,17 +47,30 @@ Do **not** revert to the contemplative tether loop unless explicitly asked. Alig
 Primary files: `main.js`, `objects.js`, `audio.js`, `index.html`, `spacefx.js` (`growSun`), `vfx.js`, `i18n.js`.
 
 
-### Micro-bonus portal (2026-09-18)
+### Micro-bonus portal + tiers (2026-09-18 → jam-win)
 - Count successful **relic** SNAPs (`relicsCollected`). At `BONUS_RELICS_NEED` (7) spawn one `KIND.PORTAL` on an inner orbit.
-- SNAP portal → enter ~30s bonus stage (`STATE.BONUS` / `bonusActive`): geometric teal planet, 4 bright orbs, denser VFX, fog/sky tint. Double flat points per bonus snap; +1 life once if ≥3 snaps (cap 5). Auto-exit on timer or clear.
-- Exit restores sun scene, same wave progress, `relicsCollected = 0`. Portal clears if unused after ~1 wave. No free black-hole DODGE. LOCK unchanged.
-- Files: `main.js`, `objects.js` (`createPortal` / `createBonusPlanet` / `createBonusOrb`), `i18n.js`, `vfx.js`, `index.html` (`#bonusTimer`, `?v=b01bonus`).
+- **Bonus entry = SNAP portal only** (LOCK never opens bonus).
+- Each successful bonus entry in a run increments `bonusTier` (0→1→2…). Timer stays **30s**.
+- Orb multiplier: `1.5 + 0.25*(tier-1)`, cap **2.25**. More orbs / slightly faster orbit / tighter band at higher tiers. Palette/fog/planet variant via `getBonusTierPalette` / `createBonusPlanet(scale, tier)` (amber/cold/teal family only).
+- +1 life once per bonus if ≥3 snaps (cap 5). Exit restores sun scene; `relicsCollected = 0`. Portal clears if unused after ~1 wave.
+- Files: `main.js`, `objects.js`, `i18n.js`, `vfx.js`, `index.html` (`?v=jamwin1`).
+
+### LOCK = alignment freeze (jam-win lock)
+- Replaces short reverse. `LOCK_FREEZE_SEC = 0.6`; soft-lock at `LOCK_SOFT_RAD_S` toward `pickLockTargetTheta()` (best non-debris).
+- Desktop **Space** still fires LOCK. Coach / startBody / titles EN·FR·ES updated (HOLD, not REV).
+
+### Silhouettes + difficulty (jam-win)
+- `objects.js`: distinct RELIC mark, PLANET (fat amber ring), STAR (long cold spikes), DEBRIS (ember jagged + danger octa), PORTAL (diamond tips). Relic ASSET meshes get `createRelicMark` child in `makeObject`.
+- `waveParams`: waves 1–3 gentler (slower, less debris, fewer objects); clearer ramp after wave 5–8. Mobile-fair.
+
+### Deposit
+- `README.md` + `docs/DEPOSIT.md` — FR+EN pitch, how to play, controls, jam note, live URL, screenshot placeholders.
 
 ### Layout / HUD chrome (2026-09-18)
 - Corner `#btnHelp` then `#btnMute` (♪/🔇 ~44px) top-left; `#btnLang` top-right — **in-game only** (`body.menu-open` hides them on start/coach/board/over/load).
 - Mute must **not** sit bottom-left (it overlapped LOCK on smartphones).
-- `#btnAutoAlign` (LOCK) kept; slightly smaller on narrow screens; SNAP remains primary control.
-- Recommended future: auto-fire LOCK after 3 Perfect (remove manual LOCK button) — product note only, not done yet.
+- `#btnAutoAlign` (LOCK freeze) kept; slightly smaller on narrow screens; SNAP remains primary control.
+- Deposit sheet: `docs/DEPOSIT.md`.
 - Start menu language: chips `#lang_en/#lang_fr/#lang_es` with pointerdown/touchend/click; `setLang` + `localStorage syzygy_lang`.
 - Dress: parallax layers in `spacefx.js`, sun corona rings + pulse, craft trail (vfx) + near-syzygy sun→object→craft guide, cut-corner menu frames, softer `#fx` vignette. Corridor HUD still only alignment meter between sun and craft.
 
@@ -219,6 +232,7 @@ syzygy/
   assets/*.js         # 8 stub relics + dying_sun + craft (+ .expect.json)
   docs/
     LLM_HANDOFF.md    # this file
+    DEPOSIT.md        # jam deposit FR+EN pitch / controls
     STYLE_LOCK.md
     DESIGN_LOCK.md
     ASSETS.md         # form-not-function briefs for real 404 assets
@@ -255,7 +269,8 @@ Keep these as north stars for the next ambitious pass:
 - No custom `jam.mjs` touch gate yet (recipe keyboard playtest is useless for SNAP)
 - Tutorial is thin (coach aside + hints); first-minute onboarding can be stronger
 - No haptics, limited particles budget discipline vs jam draw/tri caps
-- Cloud Agents unavailable on user’s Cursor plan — edits were done manually and pushed with GH token
+- Cloud Agents unavailable on user’s Cursor plan — edits done manually and pushed with GH token
+- Screenshot assets for deposit still placeholders
 
 ---
 

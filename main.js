@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=b03bonus';
-import { createSpaceAudio } from './audio.js?v=b03bonus';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b03bonus';
-import { createVfx } from './vfx.js?v=b03bonus';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb } from './objects.js?v=b03bonus';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b03bonus';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b03bonus';
+import { ASSET } from './assetlib.js?v=jamwin1';
+import { createSpaceAudio } from './audio.js?v=jamwin1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=jamwin1';
+import { createVfx } from './vfx.js?v=jamwin1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette } from './objects.js?v=jamwin1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=jamwin1';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=jamwin1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -29,9 +29,10 @@ const MAX_LIVES = 5;
 const TEAL = 0x3a9e8a;
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
 const CRAFT_R = 95;
-/** LOCK reverse arc (~16°) — clutch, not full undo. */
-const LOCK_REVERSE_RAD = 0.36; // ~21° — readable clutch without full undo
+/** LOCK = brief alignment freeze (~0.6s): soft-lock toward best non-debris syzygy. NOT reverse, NOT bonus. */
+const LOCK_FREEZE_SEC = 0.6;
 const LOCK_STREAK_NEED = 3; // same beat as HEAT — readable charge, not ultra-rare
+const LOCK_SOFT_RAD_S = 2.6; // soft-lock angular speed (rad/s) toward target
 const INNER_MIN = 42;
 const INNER_MAX = 82; // always < CRAFT_R so object is on sun→craft segment
 
@@ -81,15 +82,19 @@ let autoAlignReady = false;
 let autoAlignActive = false;
 let autoAlignUnlocked = false;
 let lockStreak = 0; // "Perfect"s toward one LOCK charge
-let lockReverseLeft = 0; // radians of reverse remaining
+let lockFreezeLeft = 0; // seconds of alignment freeze remaining
+let lockTargetTheta = null; // soft-lock aim (best non-debris)
 
-/** Micro-bonus portal (7 relic SNAPs → geometric stage). */
+/** Micro-bonus portal (7 relic SNAPs → geometric stage). Tiers rise each entry. */
 let relicsCollected = 0;
 let bonusActive = false;
 let bonusTimer = 0;
 let bonusSnaps = 0;
 let bonusLifeGranted = false;
 let bonusGroup = null;
+let bonusTier = 0; // 0 at run start; each successful entry → 1,2,3…
+let bonusOrbGoal = BONUS_TARGET_COUNT;
+let bonusOrbitBoost = 1;
 let portalSpawnWave = -1;
 let savedFogDensity = 0.0014;
 let savedBgHex = VOID;
@@ -147,14 +152,41 @@ function placeCraft() {
 }
 
 function waveParams(w) {
+  // Waves 1–3 gentler (mobile-fair); clearer ramp after 5–8.
+  if (w <= 3) {
+    return {
+      baseSpeed: 0.30 + w * 0.038,          // ~0.34–0.41
+      soft: 0.38 - w * 0.012,               // generous soft window
+      perWave: 5,
+      maxObjects: 3 + w,                    // 4–6
+      debrisChance: 0.015 + w * 0.008,      // sparse debris
+    };
+  }
+  if (w <= 5) {
+    const t = w - 3;
+    return {
+      baseSpeed: 0.42 + t * 0.05,
+      soft: Math.max(0.22, 0.34 - t * 0.03),
+      perWave: 5,
+      maxObjects: Math.min(9, 6 + t),
+      debrisChance: 0.045 + t * 0.018,
+    };
+  }
+  // Wave 6+: clearer ramp through 5–8 and beyond (still fair on mobile)
+  const t = w - 5;
   return {
-    // gentler early waves; still ramps for later tension
-    baseSpeed: 0.40 + w * 0.065,
-    soft: Math.max(0.12, 0.34 - w * 0.011),
+    baseSpeed: 0.52 + t * 0.075,
+    soft: Math.max(0.12, 0.28 - t * 0.016),
     perWave: 5,
-    maxObjects: Math.min(12, 5 + Math.floor(w / 2)),
-    debrisChance: Math.min(0.18, 0.04 + w * 0.015),
+    maxObjects: Math.min(12, 8 + Math.floor(t / 1.5)),
+    debrisChance: Math.min(0.22, 0.09 + t * 0.02),
   };
+}
+
+/** Orb point multiplier for current bonusTier (tier1=1.5 … cap 2.25). */
+function bonusOrbMult() {
+  const tier = Math.max(1, bonusTier);
+  return Math.min(2.25, 1.5 + 0.25 * (tier - 1));
 }
 
 function perfectBand(w) { return Math.max(0.88, 0.96 - w * 0.005); }
@@ -201,9 +233,9 @@ function updateHud() {
   }
   // During bonus, waveNext shows snaps left in stage
   if (bonusActive) {
-    const leftB = Math.max(0, BONUS_TARGET_COUNT - bonusSnaps);
+    const leftB = Math.max(0, bonusOrbGoal - bonusSnaps);
     setText('waveNext', t('snapsLeft', leftB));
-    setText('waveBox', t('bonusEnter'));
+    setText('waveBox', t('bonusEnter', bonusTier, bonusOrbMult()));
   }
   const heatEl = $('heatBadge');
   if (heatEl) heatEl.classList.toggle('on', heatOn);
@@ -222,7 +254,7 @@ function updateHud() {
     const charge = $('autoCharge');
     if (charge) {
       let pct = 0;
-      if (autoAlignActive) pct = Math.max(0, Math.min(100, (lockReverseLeft / LOCK_REVERSE_RAD) * 100));
+      if (autoAlignActive) pct = Math.max(0, Math.min(100, (lockFreezeLeft / LOCK_FREEZE_SEC) * 100));
       else if (autoAlignReady) pct = 100;
       else pct = Math.min(100, (lockStreak / LOCK_STREAK_NEED) * 100);
       charge.style.width = `${pct}%`;
@@ -398,16 +430,23 @@ function makeObject(kind, boss) {
       mesh.scale.setScalar(boss ? 2.6 : 1);
       owned = true;
     }
+    // Readable brass/bone beacon (ASSET stubs alone wash out at distance)
+    if (!mesh.userData.relicMark) {
+      const mark = createRelicMark(boss ? 1.15 : 0.85);
+      mark.name = 'relicMark';
+      mesh.add(mark);
+      mesh.userData.relicMark = mark;
+    }
   } else if (kind === KIND.PLANET) {
     mesh = createPlanet(boss ? 1.4 : 0.85 + Math.random() * 0.3);
   } else if (kind === KIND.STAR) {
     mesh = createStar(boss ? 1.3 : 0.75 + Math.random() * 0.25);
   } else if (kind === KIND.PORTAL) {
-    mesh = createPortal(1.15);
+    mesh = createPortal(1.25);
   } else if (kind === KIND.BONUS) {
-    mesh = createBonusOrb(0.95 + Math.random() * 0.2);
+    mesh = createBonusOrb(0.95 + Math.random() * 0.2, Math.max(1, bonusTier));
   } else {
-    mesh = createDebris(0.9 + Math.random() * 0.4);
+    mesh = createDebris(0.95 + Math.random() * 0.45);
   }
   if (owned) scene.add(mesh);
   return { kind, mesh, owned, theta: 0, radius: 70, y: 0, spin: 0.4 + Math.random() * 0.8 };
@@ -613,19 +652,20 @@ function tickPortalExpiry() {
   }
 }
 
-function applyBonusLook(on) {
+function applyBonusLook(on, tier = 1) {
   if (!scene || !renderer) return;
   if (on) {
+    const pal = getBonusTierPalette(tier);
     savedFogDensity = scene.fog?.density ?? 0.0014;
     savedBgHex = scene.background?.getHex?.() ?? VOID;
     savedExposure = renderer.toneMappingExposure;
-    scene.background = new THREE.Color(0x061418);
-    if (scene.fog) scene.fog.density = 0.0026;
-    if (scene.fog?.color) scene.fog.color.setHex(0x0a2a28);
-    renderer.toneMappingExposure = 1.35;
+    scene.background = new THREE.Color(pal.fog);
+    if (scene.fog) scene.fog.density = 0.0024 + Math.min(0.0012, (tier - 1) * 0.00025);
+    if (scene.fog?.color) scene.fog.color.setHex(pal.fogCol);
+    renderer.toneMappingExposure = 1.32 + Math.min(0.18, (tier - 1) * 0.04);
     if (spacefx?.skyMat?.uniforms?.uAmber) {
-      spacefx.skyMat.uniforms.uAmber.value.setHex(0xc49a4a);
-      spacefx.skyMat.uniforms.uCold.value.setHex(TEAL);
+      spacefx.skyMat.uniforms.uAmber.value.setHex(pal.skyA);
+      spacefx.skyMat.uniforms.uCold.value.setHex(pal.skyC);
     }
   } else {
     scene.background = new THREE.Color(savedBgHex || VOID);
@@ -652,8 +692,12 @@ function clearBonusGroup() {
 
 function enterBonus(portal) {
   if (bonusActive) return;
+  // Each successful bonus entry in a run increments tier (0→1→2…)
+  bonusTier += 1;
+  const tier = bonusTier;
+  const mult = bonusOrbMult();
   // Entry points + consume portal
-  score += BONUS_ENTRY_PTS;
+  score += BONUS_ENTRY_PTS + (tier - 1) * 50;
   if (portal) {
     const pos = portal.mesh.position.clone();
     if (vfx) {
@@ -669,43 +713,49 @@ function enterBonus(portal) {
   clearWorld();
   bonusActive = true;
   state = STATE.BONUS;
-  bonusTimer = BONUS_DURATION;
+  bonusTimer = BONUS_DURATION; // always 30s
   bonusSnaps = 0;
   bonusLifeGranted = false;
+  // Slightly harder: more orbs + faster orbit at higher tiers
+  bonusOrbGoal = BONUS_TARGET_COUNT + Math.min(3, tier - 1); // 5→8
+  bonusOrbitBoost = 1 + Math.min(0.35, (tier - 1) * 0.1);
 
-  // Hide sun; show geometric "Earth" centrepiece
+  // Hide sun; show geometric centrepiece (palette by tier)
   if (sun) sun.visible = false;
   if (sunGlow) sunGlow.visible = false;
 
   bonusGroup = new THREE.Group();
   bonusGroup.name = 'bonusStage';
-  const planet = createBonusPlanet(1);
+  const planet = createBonusPlanet(1, tier);
   bonusGroup.add(planet);
   scene.add(bonusGroup);
 
-  applyBonusLook(true);
+  applyBonusLook(true, tier);
 
   // Spawn bonus orbs on inner orbit
   const used = [];
-  for (let i = 0; i < BONUS_TARGET_COUNT; i++) {
+  const nOrbs = bonusOrbGoal;
+  for (let i = 0; i < nOrbs; i++) {
     const o = makeObject(KIND.BONUS, false);
     let theta;
     let tries = 0;
     do {
-      theta = craftTheta + ((i + 0.5) / BONUS_TARGET_COUNT) * Math.PI * 2 + Math.random() * 0.2;
+      theta = craftTheta + ((i + 0.5) / nOrbs) * Math.PI * 2 + Math.random() * 0.2;
       tries++;
-    } while (tries < 8 && used.some((a) => angDiff(a, theta) < 0.4));
+    } while (tries < 8 && used.some((a) => angDiff(a, theta) < 0.35));
     used.push(theta);
     o.theta = theta;
-    o.radius = INNER_MIN + 8 + Math.random() * (INNER_MAX - INNER_MIN - 10);
-    o.y = (Math.random() - 0.5) * 6;
-    o.spin = 1.4 + Math.random();
+    // Higher tiers: slightly tighter inner band (harder timing)
+    const tight = Math.min(10, (tier - 1) * 3);
+    o.radius = INNER_MIN + 8 + tight * 0.3 + Math.random() * Math.max(8, (INNER_MAX - INNER_MIN - 10 - tight));
+    o.y = (Math.random() - 0.5) * (6 - Math.min(2, tier - 1));
+    o.spin = 1.4 + Math.random() + (tier - 1) * 0.15;
     place(o.mesh, o.theta, o.radius, o.y);
     world.push(o);
   }
 
-  showCombo(t('bonusEnter'));
-  setHint(t('hintBonus'));
+  showCombo(t('bonusEnter', tier, mult));
+  setHint(t('hintBonus', mult));
   flash('flash');
   camPunch = 0.28;
   audio.stingWave?.();
@@ -721,8 +771,9 @@ function exitBonus(cleared) {
   state = STATE.PLAY;
   bonusTimer = 0;
 
-  // End bonus points
-  const endPts = cleared ? BONUS_END_FLAT + snaps * 200 : Math.floor(BONUS_END_FLAT * 0.35) + snaps * 100;
+  // End bonus points (scale modestly with tier just completed)
+  const tierMult = Math.min(2.25, 1.5 + 0.25 * (Math.max(1, bonusTier) - 1)) / 1.5;
+  const endPts = Math.floor((cleared ? BONUS_END_FLAT + snaps * 200 : Math.floor(BONUS_END_FLAT * 0.35) + snaps * 100) * tierMult);
   score += endPts;
 
   // +1 life once if ≥3 bonus snaps (cap 5)
@@ -740,6 +791,8 @@ function exitBonus(cleared) {
   clearWorld();
   clearBonusGroup();
   applyBonusLook(false);
+  bonusOrbitBoost = 1;
+  bonusOrbGoal = BONUS_TARGET_COUNT;
   if (sun) sun.visible = true;
   if (sunGlow) sunGlow.visible = true;
   audio.setBonusMode?.(false);
@@ -764,7 +817,7 @@ function tickBonus(dt) {
 }
 
 function doBonusSnap(target) {
-  const pts = Math.floor(BONUS_SNAP_FLAT * 1.5); // 1.5× during bonus
+  const pts = Math.floor(BONUS_SNAP_FLAT * bonusOrbMult());
   const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.05));
   score += gained;
   bonusSnaps += 1;
@@ -983,6 +1036,28 @@ function applySunGrowth() {
 }
 
 
+function pickLockTargetTheta() {
+  // Soft-lock toward best non-debris syzygy (relic/planet/star/portal/bonus).
+  let best = null;
+  let bestScore = -1;
+  for (const o of world) {
+    if (!o?.mesh || o.kind === KIND.DEBRIS) continue;
+    if (!isBetweenSunAndCraft(o) && o.kind !== KIND.BONUS) {
+      // still allow slightly off-band objects if closest angularly
+    }
+    const d = angDiff(craftTheta, o.theta);
+    const score = 1 - Math.min(1, d / Math.PI); // closer angle = better
+    // Prefer objects already near the ray
+    const prefer = d < 0.85 ? 0.35 : 0;
+    const s = score + prefer + (o.kind === KIND.RELIC ? 0.05 : 0);
+    if (s > bestScore) {
+      bestScore = s;
+      best = o;
+    }
+  }
+  return best ? best.theta : craftTheta;
+}
+
 function activateAutoAlign() {
   if (!started || over || endingCinematic) return;
   if (state !== STATE.PLAY && state !== STATE.BONUS) return;
@@ -994,21 +1069,22 @@ function activateAutoAlign() {
   autoAlignUnlocked = true;
   autoAlignActive = true;
   autoAlignReady = false;
-  lockReverseLeft = LOCK_REVERSE_RAD;
+  lockFreezeLeft = LOCK_FREEZE_SEC;
+  lockTargetTheta = pickLockTargetTheta();
   audio.stingAutoAlign?.();
   showCombo(t('lock'));
-  setHint(t('sync')); // REV in motion
+  setHint(t('sync')); // HOLD / freeze in motion
   camPunch = Math.max(camPunch, 0.18);
   if (vfx && craft) vfx.lockBurst?.(craft.position.clone(), COLD);
   updateHud();
 }
 
-/** Short reverse along orbit — distance-gated (radians), not a timed auto-snap. */
+/** Brief alignment freeze — soft-lock toward best non-debris; time-gated (~0.6s). */
 function tickAutoAlign(dt) {
   if (!autoAlignActive) return;
-  // Motion applied in frame loop via lockReverseLeft; here we only finish + FX budget.
-  if (lockReverseLeft <= 0) {
+  if (lockFreezeLeft <= 0) {
     autoAlignActive = false;
+    lockTargetTheta = null;
     setHint(t('lockDone'));
     updateHud();
   }
@@ -1028,6 +1104,8 @@ function goToMenu() {
   clearBonusGroup();
   bonusActive = false;
   relicsCollected = 0;
+  bonusTier = 0;
+  bonusOrbitBoost = 1;
   applyBonusLook(false);
   if (craft) craft.visible = true;
   if (sun) sun.visible = true;
@@ -1046,6 +1124,7 @@ function startRun() {
   endingCinematic = false;
   relicsCollected = 0; bonusActive = false; bonusTimer = 0; bonusSnaps = 0;
   bonusLifeGranted = false; portalSpawnWave = -1;
+  bonusTier = 0; bonusOrbGoal = BONUS_TARGET_COUNT; bonusOrbitBoost = 1;
   clearBonusGroup();
   applyBonusLook(false);
   zoom = 1; camDist = 110;
@@ -1061,7 +1140,8 @@ function startRun() {
   autoAlignReady = false;
   autoAlignActive = false;
   lockStreak = 0;
-  lockReverseLeft = 0;
+  lockFreezeLeft = 0;
+  lockTargetTheta = null;
   slowMo = 0;
   audio.setBonusMode?.(false);
   updateHeatVisual();
@@ -1541,7 +1621,7 @@ function tickBot() {
   if (!bestTarget) return;
   if (bestTarget.kind === KIND.DEBRIS) return;
   if (align >= goodBand(wave)) doSnap();
-  // Bot: spend LOCK reverse when charged and slightly off a good line
+  // Bot: spend LOCK freeze when charged and slightly off a good line
   if (autoAlignUnlocked && autoAlignReady && !autoAlignActive && align >= 0.5 && align < goodBand(wave)) {
     activateAutoAlign();
   }
@@ -1569,6 +1649,7 @@ function publishGame() {
     wave,
     lives,
     bonus: bonusActive,
+    bonusTier,
     relicsCollected,
   };
 }
@@ -1616,13 +1697,17 @@ function frame(now) {
     audio.setWaveLayer?.(wave);
     // Auto-orbit — speed rises slightly within wave
     const within = snapsInWave / Math.max(1, waveParams(wave).perWave);
-    const spd = orbitSpeed * (1 + within * 0.12);
+    const spd = orbitSpeed * (1 + within * 0.12) * (bonusActive ? bonusOrbitBoost : 1);
     audio.setOrbitSpeed?.(spd);
-    if (autoAlignActive && lockReverseLeft > 0) {
-      const step = Math.min(lockReverseLeft, spd * dt);
-      craftTheta -= orbitDir * step; // reverse along current orbit
-      lockReverseLeft -= step;
-      if (vfx && craft && Math.random() < dt * 28) {
+    if (autoAlignActive && lockFreezeLeft > 0) {
+      // Alignment freeze: no forward orbit; soft-lock toward best non-debris
+      lockFreezeLeft = Math.max(0, lockFreezeLeft - dt);
+      if (lockTargetTheta != null) {
+        const d = Math.atan2(Math.sin(lockTargetTheta - craftTheta), Math.cos(lockTargetTheta - craftTheta));
+        const step = Math.sign(d) * Math.min(Math.abs(d), LOCK_SOFT_RAD_S * dt);
+        craftTheta += step;
+      }
+      if (vfx && craft && Math.random() < dt * 32) {
         vfx.nearMissBurst?.(craft.position.clone());
       }
     } else {

@@ -140,7 +140,7 @@
       box-shadow:0 0 12px rgba(232,160,74,.5); transition: width .05s linear; }
     #meterLabel { text-align:center; font-size:9px; letter-spacing:.2em; color:#7a8494; margin-top:5px; }
 
-    /* Thumb-first dual controls: SNAP + LOCK */
+    /* Thumb-first dual controls: SNAP + LOCK (freeze) */
     #controls { pointer-events:none; position:absolute; left:50%; bottom:max(22px, env(safe-area-inset-bottom));
       transform:translateX(-50%); display:flex; align-items:flex-end; gap:18px; }
     #snapBtn { pointer-events:auto; width:108px; height:108px; border-radius:50%;
@@ -208,7 +208,7 @@
 
   <div id="start" class="screen">
     <h2 id="startTitle">ORBIT SNAP</h2>
-    <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 "Perfect" charge <b style="color:var(--cold)">LOCK</b> (short reverse). Pinch = zoom.</p>
+    <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. 3 "Perfect" charge <b style="color:var(--cold)">LOCK</b> (brief align freeze). 7 relic SNAPs → <b style="color:var(--amber)">SNAP portal</b> bonus. Pinch / wheel = zoom.</p>
     <div id="langRow">
       <div id="langLabel">LANGUAGE</div>
       <button type="button" class="langChip on" id="lang_en" data-lang="en">EN</button>
@@ -259,11 +259,11 @@
       <div id="meterLabel">ALIGNMENT</div>
     </div>
     <div id="controls">
-      <button id="btnAutoAlign" type="button" class="locked" title="LOCK — short reverse (3 Perfect) · Desktop: Space">LOCK<span id="autoCharge"></span></button>
+      <button id="btnAutoAlign" type="button" class="locked" title="LOCK — align freeze ~0.6s (3 Perfect) · Desktop: Space">LOCK<span id="autoCharge"></span></button>
       <button id="snapBtn" type="button">SNAP</button>
     </div>
   </div>
 
-  <script type="module" src="./main.js?v=b03bonus"></script>
+  <script type="module" src="./main.js?v=jamwin1"></script>
 </body>
 </html>
