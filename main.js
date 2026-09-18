@@ -1178,7 +1178,7 @@ function renderOverRanks(opts = {}) {
     }
   }
   preview.sort((a, b) => b.score - a.score);
-  const top = preview.slice(0, 12);
+  const top = preview.slice(0, 30);
   if (!top.length) {
     el.innerHTML = `<em>${t('lbEmpty')}</em>`;
     return;
@@ -1202,7 +1202,7 @@ function renderBoard(rows) {
   const lb = $('lb');
   if (!lb) return;
   if (!rows.length) { lb.innerHTML = `<em>${t('lbEmpty')}</em>`; return; }
-  lb.innerHTML = `<table>${rows.slice(0, 15).map((r, i) =>
+  lb.innerHTML = `<table>${rows.slice(0, 30).map((r, i) =>
     `<tr><td>${i + 1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
   ).join('')}</table>`;
 }

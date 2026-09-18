@@ -1,5 +1,7 @@
 /** Local leaderboard — honest global placeholder until a real worker exists. */
 const LOCAL_KEY = 'syzygy_snap_local_v1';
+/** Keep a wide local top so weaker runs still appear under the record. */
+export const TOP_N = 30;
 
 function normalizeEntry(r) {
   return {
@@ -10,51 +12,50 @@ function normalizeEntry(r) {
   };
 }
 
-/** Drop exact duplicates (same name + score); keep highest wave/at. Then keep best score per name. */
-export function dedupeRanks(list) {
-  const byKey = new Map();
-  for (const raw of list || []) {
-    const r = normalizeEntry(raw);
-    const key = `${r.name}|${r.score}`;
-    const prev = byKey.get(key);
-    if (!prev || (r.wave > prev.wave) || (r.wave === prev.wave && r.at > prev.at)) {
-      byKey.set(key, r);
-    }
+/**
+ * Sort by score (then wave, then newer). Keep multiple runs per name.
+ * Only drop near-identical accidental doubles (same name+score+wave within 2s).
+ */
+export function rankList(list) {
+  const sorted = (list || []).map(normalizeEntry)
+    .sort((a, b) => b.score - a.score || b.wave - a.wave || b.at - a.at);
+  const out = [];
+  for (const r of sorted) {
+    const dup = out.find((x) =>
+      x.name === r.name && x.score === r.score && x.wave === r.wave && Math.abs(x.at - r.at) < 2000
+    );
+    if (!dup) out.push(r);
   }
-  // Collapse to one row per name: best score wins
-  const byName = new Map();
-  for (const r of byKey.values()) {
-    const prev = byName.get(r.name);
-    if (!prev || r.score > prev.score || (r.score === prev.score && r.wave > prev.wave)) {
-      byName.set(r.name, r);
-    }
-  }
-  return [...byName.values()].sort((a, b) => b.score - a.score || b.wave - a.wave);
+  return out;
 }
 
 export function loadLocal() {
   try {
     const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
-    const cleaned = dedupeRanks(Array.isArray(raw) ? raw : []);
-    // Persist cleanup so duplicates disappear on next open
-    try {
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(cleaned.slice(0, 15)));
-    } catch (_) {}
-    return cleaned;
+    return rankList(Array.isArray(raw) ? raw : []).slice(0, TOP_N);
   } catch {
     return [];
   }
 }
 
 export function saveLocal(name, score, wave) {
-  const list = loadLocal();
+  let list = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
+    list = Array.isArray(raw) ? raw.map(normalizeEntry) : [];
+  } catch (_) {
+    list = [];
+  }
+  // Always append this run (even below personal / global best)
   list.push(normalizeEntry({ name, score, wave, at: Date.now() }));
-  const top = dedupeRanks(list).slice(0, 15);
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(top));
+  const top = rankList(list).slice(0, TOP_N);
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(top));
+  } catch (_) {}
   return top;
 }
 
-/** Global tab: same local top 15 with honest soft label. */
+/** Global tab: same local top with honest soft label. */
 export async function fetchGlobal() {
   return loadLocal().map((r, i) => ({
     ...r,
