@@ -21,6 +21,9 @@ const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', OVER: 'OVER' };
 const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris' };
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
 const CRAFT_R = 95;
+/** LOCK reverse arc (~16°) — clutch, not full undo. */
+const LOCK_REVERSE_RAD = 0.28;
+const LOCK_STREAK_NEED = 5;
 const INNER_MIN = 42;
 const INNER_MAX = 82; // always < CRAFT_R so object is on sun→craft segment
 
@@ -68,9 +71,9 @@ let syzygyGuide = null;
 
 let autoAlignReady = false;
 let autoAlignActive = false;
-let autoAlignTimer = 0;
-let autoAlignCd = 0;
 let autoAlignUnlocked = false;
+let lockStreak = 0; // "Perfect"s toward one LOCK charge
+let lockReverseLeft = 0; // radians of reverse remaining
 
 let pointers = new Map();
 let pinchStartDist = 0;
@@ -170,20 +173,19 @@ function updateHud() {
 
   const aa = $('btnAutoAlign');
   if (aa) {
-    aa.classList.toggle('locked', !autoAlignUnlocked);
-    aa.classList.toggle('ready', autoAlignUnlocked && autoAlignReady && !autoAlignActive && autoAlignCd <= 0);
+    const charged = autoAlignUnlocked && autoAlignReady && !autoAlignActive;
+    aa.classList.toggle('locked', !autoAlignUnlocked || (!autoAlignReady && !autoAlignActive));
+    aa.classList.toggle('ready', charged);
     aa.classList.toggle('active', autoAlignActive);
-    aa.classList.toggle('cd', autoAlignCd > 0);
-    if (!autoAlignUnlocked) aa.textContent = t('lock');
-    else if (autoAlignActive) aa.textContent = t('sync');
-    else if (autoAlignCd > 0) aa.textContent = `${Math.ceil(autoAlignCd)}s`;
+    aa.classList.toggle('cd', false);
+    if (autoAlignActive) aa.textContent = t('sync');
     else aa.textContent = t('lock');
     const charge = $('autoCharge');
     if (charge) {
       let pct = 0;
-      if (autoAlignActive) pct = (autoAlignTimer / 2.5) * 100;
-      else if (autoAlignCd > 0) pct = Math.max(0, 100 - (autoAlignCd / 8) * 100);
+      if (autoAlignActive) pct = Math.max(0, Math.min(100, (lockReverseLeft / LOCK_REVERSE_RAD) * 100));
       else if (autoAlignReady) pct = 100;
+      else pct = Math.min(100, (lockStreak / LOCK_STREAK_NEED) * 100);
       charge.style.width = `${pct}%`;
     }
   }
@@ -211,7 +213,7 @@ function setHint(t) { setText('hint', t); }
 let coachIdx = 0;
 
 function showStartOrCoach() {
-  const seen = localStorage.getItem('syzygy_coach_v1') === '1';
+  const seen = localStorage.getItem('syzygy_coach_v2') === '1';
   if (seen) {
     $('coachFlow')?.classList.remove('on');
     $('start')?.classList.add('on');
@@ -270,7 +272,7 @@ function advanceCoach() {
   audio.start();
   coachIdx += 1;
   if (coachIdx >= coachScreens().length) {
-    localStorage.setItem('syzygy_coach_v1', '1');
+    localStorage.setItem('syzygy_coach_v2', '1');
     $('coachFlow')?.classList.remove('on');
     if (helpReturnTo === 'hud') {
       $('hud')?.classList.add('on');
@@ -516,6 +518,7 @@ function failLife(reason) {
   flashHp();
   combo = 0;
   perfectStreak = 0;
+  lockStreak = 0;
   heatOn = false;
   updateHeatVisual();
   audio.stingMiss();
@@ -558,9 +561,14 @@ function doSnap() {
 
   let grade = 'OK';
   let pts = 200;
-  if (align >= perf) { grade = 'PERFECT'; pts = 1000; combo += 1; perfectStreak += 1; }
-  else if (align >= good) { grade = 'GOOD'; pts = 500; combo += 1; perfectStreak = 0; }
-  else { grade = 'OK'; pts = 200; combo = 0; perfectStreak = 0; }
+  if (align >= perf) {
+    grade = 'PERFECT'; pts = 1000; combo += 1; perfectStreak += 1;
+    lockStreak += 1;
+  } else if (align >= good) {
+    grade = 'GOOD'; pts = 500; combo += 1; perfectStreak = 0; lockStreak = 0;
+  } else {
+    grade = 'OK'; pts = 200; combo = 0; perfectStreak = 0; lockStreak = 0;
+  }
 
   updateHeat();
   const { bonus, tags } = stackBonus(target);
@@ -615,16 +623,16 @@ function updateHeat() {
   if (perfectStreak >= 3) {
     if (!heatOn) showCombo('HEAT x2');
     heatOn = true;
-    if (!autoAlignUnlocked) {
-      autoAlignUnlocked = true;
-      autoAlignReady = true;
-      showCombo(t('lockUnlocked'));
-      setHint(t('lockReady'));
-    } else if (autoAlignCd <= 0) {
-      autoAlignReady = true;
-    }
   } else {
     heatOn = false;
+  }
+  // LOCK: one charge after LOCK_STREAK_NEED "Perfect"s (separate from heat)
+  if (lockStreak >= LOCK_STREAK_NEED && !autoAlignReady && !autoAlignActive) {
+    autoAlignUnlocked = true;
+    autoAlignReady = true;
+    lockStreak = 0;
+    showCombo(t('lockUnlocked'));
+    setHint(t('lockReady'));
   }
   updateHeatVisual();
 }
@@ -688,57 +696,28 @@ function applySunGrowth() {
 
 
 function activateAutoAlign() {
-  if (!started || over || !autoAlignUnlocked || !autoAlignReady || autoAlignActive || autoAlignCd > 0) return;
+  if (!started || over || state !== STATE.PLAY || endingCinematic) return;
+  if (!autoAlignUnlocked || !autoAlignReady || autoAlignActive) return;
   autoAlignActive = true;
   autoAlignReady = false;
-  autoAlignTimer = 2.5;
+  lockReverseLeft = LOCK_REVERSE_RAD;
   audio.stingAutoAlign?.();
-  showCombo('LOCK');
-  setHint('SYNC — alignement assisté');
+  showCombo(t('lock'));
+  setHint(t('lockReady'));
+  camPunch = Math.max(camPunch, 0.12);
   updateHud();
 }
 
+/** Short reverse along orbit — distance-gated (radians), not a timed auto-snap. */
 function tickAutoAlign(dt) {
-  if (autoAlignCd > 0) {
-    autoAlignCd = Math.max(0, autoAlignCd - dt);
-    if (autoAlignCd <= 0) autoAlignReady = autoAlignUnlocked;
-  }
   if (!autoAlignActive) return;
-
-  autoAlignTimer -= dt;
-  // Steer toward nearest good (non-debris) alignment
-  let best = null;
-  let bestD = 99;
-  for (const o of world) {
-    if (o.kind === KIND.DEBRIS) continue;
-    if (!isBetweenSunAndCraft(o)) continue;
-    const d = angDiff(craftTheta, o.theta);
-    if (d < bestD) { bestD = d; best = o; }
-  }
-  if (best && bestD > 0.02) {
-    const delta = Math.atan2(Math.sin(best.theta - craftTheta), Math.cos(best.theta - craftTheta));
-    craftTheta += Math.sign(delta) * Math.min(Math.abs(delta), 1.8 * dt);
-  }
-  // Soft auto-snap once when close enough
-  if (best && bestD < 0.08 && align >= goodBand(wave) * 0.92) {
+  // Motion applied in frame loop via lockReverseLeft; here we only finish + FX budget.
+  if (lockReverseLeft <= 0) {
     autoAlignActive = false;
-    autoAlignCd = 8;
-    doSnap();
-    return;
-  }
-  if (autoAlignTimer <= 0) {
-    autoAlignActive = false;
-    autoAlignCd = 8;
-    // soft opportunity: if decent align, score OK
-    computeAlignment();
-    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.6) {
-      doSnap();
-    } else {
-      setHint(t('lockDone'));
-    }
+    setHint(t('lockDone'));
+    updateHud();
   }
 }
-
 
 function goToMenu() {
   over = true;
@@ -778,8 +757,8 @@ function startRun() {
   autoAlignUnlocked = false;
   autoAlignReady = false;
   autoAlignActive = false;
-  autoAlignTimer = 0;
-  autoAlignCd = 0;
+  lockStreak = 0;
+  lockReverseLeft = 0;
   slowMo = 0;
   updateHeatVisual();
   $('start')?.classList.remove('on');
@@ -1026,7 +1005,7 @@ async function boot() {
   botOn = /(?:\?|&)bot=1(?:&|$)/.test(location.search) || location.hash === '#bot';
   if (botOn) {
     console.info('[SYZYGY] bot playtest ON');
-    localStorage.setItem('syzygy_coach_v1', '1');
+    localStorage.setItem('syzygy_coach_v2', '1');
   }
   publishGame();
 
@@ -1242,7 +1221,8 @@ function tickBot() {
   if (!bestTarget) return;
   if (bestTarget.kind === KIND.DEBRIS) return;
   if (align >= goodBand(wave)) doSnap();
-  if (autoAlignUnlocked && autoAlignReady && autoAlignCd <= 0 && !autoAlignActive && align >= 0.6) {
+  // Bot: spend LOCK reverse when charged and slightly off a good line
+  if (autoAlignUnlocked && autoAlignReady && !autoAlignActive && align >= 0.5 && align < goodBand(wave)) {
     activateAutoAlign();
   }
 }
@@ -1316,7 +1296,16 @@ function frame(now) {
     const within = snapsInWave / Math.max(1, waveParams(wave).perWave);
     const spd = orbitSpeed * (1 + within * 0.12);
     audio.setOrbitSpeed?.(spd);
-    craftTheta += orbitDir * spd * dt;
+    if (autoAlignActive && lockReverseLeft > 0) {
+      const step = Math.min(lockReverseLeft, spd * dt);
+      craftTheta -= orbitDir * step; // reverse along current orbit
+      lockReverseLeft -= step;
+      if (vfx && craft && Math.random() < dt * 28) {
+        vfx.nearMissBurst?.(craft.position.clone());
+      }
+    } else {
+      craftTheta += orbitDir * spd * dt;
+    }
 
     tickAutoAlign(dt);
     computeAlignment();
