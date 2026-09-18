@@ -210,7 +210,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   let meteorCD = 2;
 
   return {
-    update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false } = {}) {
+    update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false } = {}) {
       // trail
       if (craftPos) {
         if (craftPos.distanceToSquared(lastCraft) > 0.18) {
@@ -258,11 +258,18 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
       if (heat) trail.material.color.setHex(amber);
       else trail.material.color.setHex(alignT > 0.6 ? cold : amber);
 
-      // meteors
+      // meteors (denser during micro-bonus)
       meteorCD -= dt;
       if (meteorCD <= 0) {
         spawnMeteor();
-        meteorCD = 1.8 + Math.random() * 3.5;
+        if (bonus) spawnMeteor();
+        meteorCD = bonus ? (0.45 + Math.random() * 0.9) : (1.8 + Math.random() * 3.5);
+      }
+      if (bonus) {
+        sparks.material.opacity = Math.min(1, (sparks.material.opacity || 0.5) + 0.15);
+        sparks.material.size = 1.8;
+      } else {
+        sparks.material.size = 1.4;
       }
       for (let i = meteors.length - 1; i >= 0; i--) {
         const m = meteors[i];

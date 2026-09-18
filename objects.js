@@ -155,4 +155,197 @@ export function createDebris(scale = 1) {
   return g;
 }
 
-export const OBJECT_COLORS = { AMBER, COLD, BRASS, BRASS_DK, OBSIDIAN, BONE, EMBER };
+export const OBJECT_COLORS = { AMBER, COLD, BRASS, BRASS_DK, OBSIDIAN, BONE, EMBER, TEAL: 0x3a9e8a };
+
+const TEAL = 0x3a9e8a;
+const TEAL_LT = 0x5ec4a8;
+const GREEN_ORB = 0x4aad6e;
+
+/** Amber+cold singularity ring — portal to micro-bonus (no textures). */
+export function createPortal(scale = 1) {
+  const g = new THREE.Group();
+  g.name = 'portal';
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(1.6 * scale, 16, 12),
+    new THREE.MeshStandardMaterial({
+      color: TEAL,
+      emissive: TEAL_LT,
+      emissiveIntensity: 0.75,
+      metalness: 0.35,
+      roughness: 0.35,
+    })
+  );
+  g.add(core);
+  const inner = new THREE.Mesh(
+    new THREE.SphereGeometry(1.15 * scale, 12, 10),
+    new THREE.MeshBasicMaterial({
+      color: 0x0a1218,
+      transparent: true,
+      opacity: 0.85,
+    })
+  );
+  g.add(inner);
+  const ringMat = (color, opacity) =>
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+  const r1 = new THREE.Mesh(new THREE.RingGeometry(2.1 * scale, 2.7 * scale, 48), ringMat(AMBER, 0.65));
+  r1.rotation.x = Math.PI / 2.15;
+  g.add(r1);
+  const r2 = new THREE.Mesh(new THREE.RingGeometry(2.9 * scale, 3.45 * scale, 48), ringMat(COLD, 0.45));
+  r2.rotation.x = Math.PI / 2.4;
+  r2.rotation.z = 0.35;
+  g.add(r2);
+  const r3 = new THREE.Mesh(new THREE.TorusGeometry(2.5 * scale, 0.08 * scale, 8, 40), ringMat(TEAL_LT, 0.7));
+  r3.rotation.y = 0.4;
+  g.add(r3);
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(3.8 * scale, 14, 12),
+    new THREE.MeshBasicMaterial({
+      color: TEAL,
+      transparent: true,
+      opacity: 0.12,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  g.add(halo);
+  g.userData.portalRings = [r1, r2, r3];
+  return g;
+}
+
+/** Geometric Earth-like centrepiece for bonus stage (spheres + rings only). */
+export function createBonusPlanet(scale = 1) {
+  const g = new THREE.Group();
+  g.name = 'bonusPlanet';
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(14 * scale, 28, 20),
+    new THREE.MeshStandardMaterial({
+      color: TEAL,
+      emissive: 0x1a4a3a,
+      emissiveIntensity: 0.35,
+      metalness: 0.25,
+      roughness: 0.55,
+    })
+  );
+  g.add(body);
+  for (let i = 0; i < 5; i++) {
+    const y = (-8 + i * 4) * scale;
+    const latR = Math.max(2, 14 * scale * Math.cos(y / (14 * scale)));
+    const band = new THREE.Mesh(
+      new THREE.TorusGeometry(latR, 0.35 * scale, 6, 40),
+      new THREE.MeshStandardMaterial({
+        color: i % 2 ? GREEN_ORB : TEAL_LT,
+        emissive: i % 2 ? GREEN_ORB : TEAL,
+        emissiveIntensity: 0.2,
+        metalness: 0.4,
+        roughness: 0.45,
+      })
+    );
+    band.rotation.x = Math.PI / 2;
+    band.position.y = y * 0.45;
+    g.add(band);
+  }
+  const poles = [-1, 1].map((s) => {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(3.2 * scale, 12, 10),
+      new THREE.MeshStandardMaterial({
+        color: 0xc8d8e8,
+        emissive: COLD,
+        emissiveIntensity: 0.25,
+        metalness: 0.2,
+        roughness: 0.6,
+      })
+    );
+    cap.position.y = s * 12.5 * scale;
+    cap.scale.set(1, 0.45, 1);
+    g.add(cap);
+    return cap;
+  });
+  void poles;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(18 * scale, 23 * scale, 64),
+    new THREE.MeshBasicMaterial({
+      color: AMBER,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+  );
+  ring.rotation.x = Math.PI / 2.3;
+  g.add(ring);
+  const ring2 = new THREE.Mesh(
+    new THREE.RingGeometry(24 * scale, 26.5 * scale, 64),
+    new THREE.MeshBasicMaterial({
+      color: COLD,
+      transparent: true,
+      opacity: 0.28,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+  );
+  ring2.rotation.x = Math.PI / 2.55;
+  g.add(ring2);
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(15.5 * scale, 16, 12),
+    new THREE.MeshBasicMaterial({
+      color: TEAL_LT,
+      transparent: true,
+      opacity: 0.14,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  g.add(glow);
+  return g;
+}
+
+/** Bright bonus snap target orb. */
+export function createBonusOrb(scale = 1) {
+  const g = new THREE.Group();
+  g.name = 'bonusOrb';
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(1.8 * scale, 16, 12),
+    new THREE.MeshStandardMaterial({
+      color: TEAL_LT,
+      emissive: GREEN_ORB,
+      emissiveIntensity: 0.95,
+      metalness: 0.2,
+      roughness: 0.3,
+    })
+  );
+  g.add(core);
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(2.4 * scale, 14, 10),
+    new THREE.MeshBasicMaterial({
+      color: AMBER,
+      transparent: true,
+      opacity: 0.28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  g.add(shell);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.6 * scale, 0.12 * scale, 6, 28),
+    new THREE.MeshBasicMaterial({
+      color: COLD,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+  return g;
+}
+
+export { TEAL, TEAL_LT, GREEN_ORB };

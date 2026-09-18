@@ -127,6 +127,10 @@
       color:var(--good); opacity:0; text-shadow:0 0 24px rgba(90,214,122,.6); transition:opacity .15s; }
     #combo.show { opacity:1; }
     #heatBadge { top:max(92px, calc(env(safe-area-inset-top) + 82px)); }
+    #bonusTimer { position:absolute; left:0; right:0; top:max(112px, calc(env(safe-area-inset-top) + 102px));
+      text-align:center; font-size:12px; letter-spacing:.22em; color:var(--good); opacity:0;
+      text-shadow:0 0 16px rgba(58,158,138,.55); pointer-events:none; transition:opacity .2s; }
+    #bonusTimer.on { opacity:1; }
 
     /* Alignment meter — mid corridor between sun and craft, NOT sitting on the ship */
     #meterWrap { position:absolute; left:50%; top:46%;
@@ -246,6 +250,7 @@
       </div>
     </div>
     <div id="heatBadge">HEAT x2</div>
+    <div id="bonusTimer" aria-live="polite"></div>
     <div id="hint">Feel the alignment · SNAP</div>
     <div id="combo">PERFECT x2</div>
     <aside id="coach">ORBIT · FEEL · SNAP</aside>
@@ -259,6 +264,6 @@
     </div>
   </div>
 
-  <script type="module" src="./main.js?v=a19lock"></script>
+  <script type="module" src="./main.js?v=b01bonus"></script>
 </body>
 </html>

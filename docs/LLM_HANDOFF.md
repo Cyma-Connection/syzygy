@@ -5,7 +5,7 @@
 **Last updated:** 2026-09-18  
 **Current live build:** https://cyma-connection.github.io/syzygy/  
 **Source repo:** https://github.com/Cyma-Connection/syzygy  
-**Latest known commit family:** Mobile lang chips + mute top-bar (clear of LOCK) + visual dress pack  
+**Latest known commit family:** Micro-bonus portal (7 relics → geometric bonus stage) + prior LOCK/mobile pack  
 **Jam:** [404 Game Jam](https://game.404.xyz/) — closes **25 Sep 2026, 23:59 UTC**
 
 ---
@@ -45,6 +45,13 @@ Do **not** revert to the contemplative tether loop unless explicitly asked. Alig
 | Extras | Near-miss sparks, heat amber trail, boss every 5 waves (denser debris + big relic), Perfect slow-mo. |
 
 Primary files: `main.js`, `objects.js`, `audio.js`, `index.html`, `spacefx.js` (`growSun`), `vfx.js`, `i18n.js`.
+
+
+### Micro-bonus portal (2026-09-18)
+- Count successful **relic** SNAPs (`relicsCollected`). At `BONUS_RELICS_NEED` (7) spawn one `KIND.PORTAL` on an inner orbit.
+- SNAP portal → enter ~10s bonus stage (`STATE.BONUS` / `bonusActive`): geometric teal planet, 4 bright orbs, denser VFX, fog/sky tint. Double flat points per bonus snap; +1 life once if ≥3 snaps (cap 5). Auto-exit on timer or clear.
+- Exit restores sun scene, same wave progress, `relicsCollected = 0`. Portal clears if unused after ~1 wave. No free black-hole DODGE. LOCK unchanged.
+- Files: `main.js`, `objects.js` (`createPortal` / `createBonusPlanet` / `createBonusOrb`), `i18n.js`, `vfx.js`, `index.html` (`#bonusTimer`, `?v=b01bonus`).
 
 ### Layout / HUD chrome (2026-09-18)
 - Corner `#btnHelp` then `#btnMute` (♪/🔇 ~44px) top-left; `#btnLang` top-right — **in-game only** (`body.menu-open` hides them on start/coach/board/over/load).

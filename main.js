@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=a19lock';
-import { createSpaceAudio } from './audio.js?v=a19lock';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=a19lock';
-import { createVfx } from './vfx.js?v=a19lock';
-import { createPlanet, createStar, createDebris } from './objects.js?v=a19lock';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=a19lock';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=a19lock';
+import { ASSET } from './assetlib.js?v=b01bonus';
+import { createSpaceAudio } from './audio.js?v=b01bonus';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=b01bonus';
+import { createVfx } from './vfx.js?v=b01bonus';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb } from './objects.js?v=b01bonus';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=b01bonus';
+import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=b01bonus';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -17,8 +17,16 @@ const VOID = 0x04050a;
 const GOOD = 0x5ad67a;
 const BAD = 0xff4d6a;
 
-const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', OVER: 'OVER' };
-const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris' };
+const STATE = { BOOT: 'BOOT', PLAY: 'PLAY', BONUS: 'BONUS', OVER: 'OVER' };
+const KIND = { RELIC: 'relic', PLANET: 'planet', STAR: 'star', DEBRIS: 'debris', PORTAL: 'portal', BONUS: 'bonus' };
+const BONUS_RELICS_NEED = 7;
+const BONUS_DURATION = 10; // seconds (8–12 micro-bonus)
+const BONUS_TARGET_COUNT = 4;
+const BONUS_SNAP_FLAT = 600;
+const BONUS_END_FLAT = 1500;
+const BONUS_ENTRY_PTS = 250;
+const MAX_LIVES = 5;
+const TEAL = 0x3a9e8a;
 /** Craft orbit radius — SNAP targets must sit BETWEEN sun (0) and craft (true syzygy). */
 const CRAFT_R = 95;
 /** LOCK reverse arc (~16°) — clutch, not full undo. */
@@ -74,6 +82,18 @@ let autoAlignActive = false;
 let autoAlignUnlocked = false;
 let lockStreak = 0; // "Perfect"s toward one LOCK charge
 let lockReverseLeft = 0; // radians of reverse remaining
+
+/** Micro-bonus portal (7 relic SNAPs → geometric stage). */
+let relicsCollected = 0;
+let bonusActive = false;
+let bonusTimer = 0;
+let bonusSnaps = 0;
+let bonusLifeGranted = false;
+let bonusGroup = null;
+let portalSpawnWave = -1;
+let savedFogDensity = 0.0014;
+let savedBgHex = VOID;
+let savedExposure = 1.2;
 
 let pointers = new Map();
 let pinchStartDist = 0;
@@ -159,14 +179,31 @@ function updateHud() {
   if (fill) fill.style.width = `${Math.floor(align * 100)}%`;
   const btn = $('snapBtn');
   if (btn) {
-    const hot = align >= goodBand(wave) && bestTarget && bestTarget.kind !== KIND.DEBRIS;
+    const safeKind = bestTarget && bestTarget.kind !== KIND.DEBRIS;
+    const hot = align >= goodBand(wave) && safeKind;
     const danger = align >= 0.55 && bestTarget && bestTarget.kind === KIND.DEBRIS;
     const near = align >= 0.5 && !hot && !danger;
     btn.classList.toggle('hot', hot);
     btn.classList.toggle('near', near);
     btn.classList.toggle('danger', danger);
-    const t = Math.max(0, Math.min(1, (align - 0.35) / 0.65));
-    btn.style.setProperty('--snap-pulse', `${(0.9 - t * 0.6).toFixed(2)}s`);
+    const tt = Math.max(0, Math.min(1, (align - 0.35) / 0.65));
+    btn.style.setProperty('--snap-pulse', `${(0.9 - tt * 0.6).toFixed(2)}s`);
+  }
+  const bt = $('bonusTimer');
+  if (bt) {
+    if (bonusActive) {
+      bt.classList.add('on');
+      bt.textContent = t('bonusTimer', Math.max(0, Math.ceil(bonusTimer)));
+    } else {
+      bt.classList.remove('on');
+      bt.textContent = '';
+    }
+  }
+  // During bonus, waveNext shows snaps left in stage
+  if (bonusActive) {
+    const leftB = Math.max(0, BONUS_TARGET_COUNT - bonusSnaps);
+    setText('waveNext', t('snapsLeft', leftB));
+    setText('waveBox', t('bonusEnter'));
   }
   const heatEl = $('heatBadge');
   if (heatEl) heatEl.classList.toggle('on', heatOn);
@@ -244,7 +281,7 @@ let helpReturnTo = null; // 'start' | 'hud'
 
 function openHelpCoach() {
   // Pause play presentation: keep state but hide hud / start under coach
-  if (started && !over && state === STATE.PLAY) {
+  if (started && !over && (state === STATE.PLAY || state === STATE.BONUS)) {
     helpReturnTo = 'hud';
     $('hud')?.classList.remove('on');
   } else {
@@ -308,7 +345,7 @@ function clearWorld() {
 }
 
 function countScoring() {
-  return world.filter((o) => o.kind !== KIND.DEBRIS).length;
+  return world.filter((o) => o.kind !== KIND.DEBRIS && o.kind !== KIND.PORTAL && o.kind !== KIND.BONUS).length;
 }
 
 function pickKind(boss) {
@@ -329,6 +366,7 @@ function pickKind(boss) {
 }
 
 function ensureProgressTargets() {
+  if (bonusActive) return;
   let guard = 0;
   while (countScoring() < 4 && world.length < 14 && guard++ < 10) {
     const kind = Math.random() < 0.55 ? KIND.RELIC : (Math.random() < 0.5 ? KIND.PLANET : KIND.STAR);
@@ -364,6 +402,10 @@ function makeObject(kind, boss) {
     mesh = createPlanet(boss ? 1.4 : 0.85 + Math.random() * 0.3);
   } else if (kind === KIND.STAR) {
     mesh = createStar(boss ? 1.3 : 0.75 + Math.random() * 0.25);
+  } else if (kind === KIND.PORTAL) {
+    mesh = createPortal(1.15);
+  } else if (kind === KIND.BONUS) {
+    mesh = createBonusOrb(0.95 + Math.random() * 0.2);
   } else {
     mesh = createDebris(0.9 + Math.random() * 0.4);
   }
@@ -372,6 +414,7 @@ function makeObject(kind, boss) {
 }
 
 function spawnWaveField() {
+  if (bonusActive) return;
   clearWorld();
   const p = waveParams(wave);
   isBossWave = wave > 0 && wave % 5 === 0;
@@ -413,6 +456,7 @@ function spawnWaveField() {
 }
 
 function refillObject() {
+  if (bonusActive) return;
   if (world.length >= waveParams(wave).maxObjects + (isBossWave ? 3 : 0)) return;
   const kind = (countScoring() >= 4 && isBossWave && Math.random() < 0.28) ? KIND.DEBRIS : pickKind(false);
   const o = makeObject(kind, false);
@@ -492,7 +536,7 @@ function stackBonus(primary) {
   let bonus = 1;
   const tags = [];
   for (const o of world) {
-    if (o === primary || o.kind === KIND.DEBRIS) continue;
+    if (o === primary || o.kind === KIND.DEBRIS || o.kind === KIND.PORTAL || o.kind === KIND.BONUS) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) {
       if (o.kind === KIND.PLANET) { bonus += 0.5; tags.push('PLANET'); }
@@ -531,9 +575,227 @@ function failLife(reason) {
   if (lives <= 0) endRun();
 }
 
+
+function findPortal() {
+  return world.find((o) => o.kind === KIND.PORTAL) || null;
+}
+
+function clearPortal() {
+  const p = findPortal();
+  if (p) removeObject(p);
+  portalSpawnWave = -1;
+}
+
+function maybeSpawnPortal() {
+  if (bonusActive || findPortal()) return;
+  if (relicsCollected < BONUS_RELICS_NEED) return;
+  const o = makeObject(KIND.PORTAL, false);
+  o.theta = craftTheta + Math.PI * (0.65 + Math.random() * 0.5) * (Math.random() < 0.5 ? 1 : -1);
+  o.radius = 58 + Math.random() * 12; // inner orbit, sun→portal→craft
+  o.y = 0;
+  o.spin = 1.2;
+  place(o.mesh, o.theta, o.radius, o.y);
+  world.push(o);
+  portalSpawnWave = wave;
+  setHint(t('hintPortal'));
+  showCombo('PORTAL');
+  if (vfx) vfx.lockBurst?.(o.mesh.position.clone(), TEAL);
+  updateHud();
+}
+
+function tickPortalExpiry() {
+  if (bonusActive || !findPortal()) return;
+  // Unused portal clears after ~1 wave
+  if (portalSpawnWave >= 0 && wave > portalSpawnWave) {
+    clearPortal();
+    relicsCollected = 0;
+    setHint(t('hintAlign'));
+  }
+}
+
+function applyBonusLook(on) {
+  if (!scene || !renderer) return;
+  if (on) {
+    savedFogDensity = scene.fog?.density ?? 0.0014;
+    savedBgHex = scene.background?.getHex?.() ?? VOID;
+    savedExposure = renderer.toneMappingExposure;
+    scene.background = new THREE.Color(0x061418);
+    if (scene.fog) scene.fog.density = 0.0026;
+    if (scene.fog?.color) scene.fog.color.setHex(0x0a2a28);
+    renderer.toneMappingExposure = 1.35;
+    if (spacefx?.skyMat?.uniforms?.uAmber) {
+      spacefx.skyMat.uniforms.uAmber.value.setHex(0xc49a4a);
+      spacefx.skyMat.uniforms.uCold.value.setHex(TEAL);
+    }
+  } else {
+    scene.background = new THREE.Color(savedBgHex || VOID);
+    if (scene.fog) {
+      scene.fog.density = savedFogDensity || 0.0014;
+      if (scene.fog.color) scene.fog.color.setHex(0x060814);
+    }
+    renderer.toneMappingExposure = savedExposure || 1.2;
+    if (spacefx?.skyMat?.uniforms?.uAmber) {
+      spacefx.skyMat.uniforms.uAmber.value.setHex(AMBER);
+      spacefx.skyMat.uniforms.uCold.value.setHex(COLD);
+    }
+  }
+}
+
+function clearBonusGroup() {
+  if (!bonusGroup || !scene) return;
+  scene.remove(bonusGroup);
+  bonusGroup.traverse?.((n) => {
+    if (n.geometry) n.geometry.dispose?.();
+  });
+  bonusGroup = null;
+}
+
+function enterBonus(portal) {
+  if (bonusActive) return;
+  // Entry points + consume portal
+  score += BONUS_ENTRY_PTS;
+  if (portal) {
+    const pos = portal.mesh.position.clone();
+    if (vfx) {
+      vfx.lockBurst(pos, TEAL);
+      vfx.pulseAt(new THREE.Vector3(), TEAL);
+    }
+    removeObject(portal);
+  }
+  clearPortal();
+  relicsCollected = 0;
+  portalSpawnWave = -1;
+
+  clearWorld();
+  bonusActive = true;
+  state = STATE.BONUS;
+  bonusTimer = BONUS_DURATION;
+  bonusSnaps = 0;
+  bonusLifeGranted = false;
+
+  // Hide sun; show geometric "Earth" centrepiece
+  if (sun) sun.visible = false;
+  if (sunGlow) sunGlow.visible = false;
+
+  bonusGroup = new THREE.Group();
+  bonusGroup.name = 'bonusStage';
+  const planet = createBonusPlanet(1);
+  bonusGroup.add(planet);
+  scene.add(bonusGroup);
+
+  applyBonusLook(true);
+
+  // Spawn bonus orbs on inner orbit
+  const used = [];
+  for (let i = 0; i < BONUS_TARGET_COUNT; i++) {
+    const o = makeObject(KIND.BONUS, false);
+    let theta;
+    let tries = 0;
+    do {
+      theta = craftTheta + ((i + 0.5) / BONUS_TARGET_COUNT) * Math.PI * 2 + Math.random() * 0.2;
+      tries++;
+    } while (tries < 8 && used.some((a) => angDiff(a, theta) < 0.4));
+    used.push(theta);
+    o.theta = theta;
+    o.radius = INNER_MIN + 8 + Math.random() * (INNER_MAX - INNER_MIN - 10);
+    o.y = (Math.random() - 0.5) * 6;
+    o.spin = 1.4 + Math.random();
+    place(o.mesh, o.theta, o.radius, o.y);
+    world.push(o);
+  }
+
+  showCombo(t('bonusEnter'));
+  setHint(t('hintBonus'));
+  flash('flash');
+  camPunch = 0.28;
+  audio.stingWave?.();
+  updateHud();
+  publishGame();
+}
+
+function exitBonus(cleared) {
+  if (!bonusActive) return;
+  const snaps = bonusSnaps;
+  bonusActive = false;
+  state = STATE.PLAY;
+  bonusTimer = 0;
+
+  // End bonus points
+  const endPts = cleared ? BONUS_END_FLAT + snaps * 200 : Math.floor(BONUS_END_FLAT * 0.35) + snaps * 100;
+  score += endPts;
+
+  // +1 life once if ≥3 bonus snaps (cap 5)
+  if (!bonusLifeGranted && snaps >= 3 && lives < MAX_LIVES) {
+    lives = Math.min(MAX_LIVES, lives + 1);
+    bonusLifeGranted = true;
+    showCombo(t('bonusLife'));
+  } else if (cleared) {
+    showCombo(t('bonusClear'));
+  } else {
+    showCombo(t('bonusEnd'));
+  }
+  setHint(`+${endPts} · ${t('bonusEnd')}`);
+
+  clearWorld();
+  clearBonusGroup();
+  applyBonusLook(false);
+  if (sun) sun.visible = true;
+  if (sunGlow) sunGlow.visible = true;
+
+  // Preserve wave progress; respawn field for current wave
+  spawnWaveField();
+  updateHud();
+  publishGame();
+}
+
+function tickBonus(dt) {
+  if (!bonusActive) return;
+  bonusTimer -= dt;
+  if (bonusGroup) bonusGroup.rotation.y += dt * 0.15;
+  // Spin portal-style rings on bonus orbs already handled in frame
+  if (bonusTimer <= 0) {
+    exitBonus(false);
+    return;
+  }
+  const left = world.filter((o) => o.kind === KIND.BONUS).length;
+  if (left === 0) exitBonus(true);
+}
+
+function doBonusSnap(target) {
+  const pts = BONUS_SNAP_FLAT * 2; // double points during bonus
+  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.05));
+  score += gained;
+  bonusSnaps += 1;
+  combo += 1;
+  bestCombo = Math.max(bestCombo, combo);
+
+  audio.stingPerfect?.() || audio.stingGood?.();
+  const pos = target.mesh.position.clone();
+  flash('flashPerfect');
+  camPunch = 0.22;
+  if (vfx) {
+    vfx.shatterAt(pos, TEAL, 18, 1.1);
+    vfx.lockBurst(pos, AMBER);
+  }
+  showCombo(`${t('gradePerfect')} +${gained}`);
+  setHint(t('bonusTimer', Math.max(0, Math.ceil(bonusTimer))));
+  removeObject(target);
+
+  if (!bonusLifeGranted && bonusSnaps >= 3 && lives < MAX_LIVES) {
+    lives = Math.min(MAX_LIVES, lives + 1);
+    bonusLifeGranted = true;
+    showCombo(t('bonusLife'));
+  }
+  updateHud();
+  if (world.filter((o) => o.kind === KIND.BONUS).length === 0) {
+    exitBonus(true);
+  }
+}
+
 function doSnap() {
   audio.start();
-  if (!started || over || state !== STATE.PLAY || endingCinematic) return;
+  if (!started || over || endingCinematic) return;
+  if (state !== STATE.PLAY && state !== STATE.BONUS) return;
   if (freezeFrames > 0) return;
 
   computeAlignment();
@@ -543,6 +805,17 @@ function doSnap() {
 
   if (!target || align < 0.45) {
     failLife(align < 0.2 ? 'NO SYZYGY' : 'WEAK ALIGN');
+    return;
+  }
+
+  if (target.kind === KIND.PORTAL) {
+    enterBonus(target);
+    return;
+  }
+
+  if (target.kind === KIND.BONUS || bonusActive) {
+    if (target.kind === KIND.BONUS) doBonusSnap(target);
+    else failLife('WEAK ALIGN');
     return;
   }
 
@@ -579,6 +852,10 @@ function doSnap() {
   score += gained;
   bestCombo = Math.max(bestCombo, combo);
   snapsInWave += 1;
+  if (target.kind === KIND.RELIC) {
+    relicsCollected += 1;
+    maybeSpawnPortal();
+  }
 
   if (grade === 'PERFECT') audio.stingPerfect();
   else if (grade === 'GOOD') audio.stingGood();
@@ -609,7 +886,7 @@ function doSnap() {
   // Consume primary; also consume stacked allies on the ray for juice
   const toRemove = [target];
   for (const o of world) {
-    if (o === target || o.kind === KIND.DEBRIS) continue;
+    if (o === target || o.kind === KIND.DEBRIS || o.kind === KIND.PORTAL || o.kind === KIND.BONUS) continue;
     if (!isBetweenSunAndCraft(o)) continue;
     if (angDiff(craftTheta, o.theta) < 0.18) toRemove.push(o);
   }
@@ -656,6 +933,7 @@ function updateHeatVisual() {
 }
 
 function maybeAdvanceWave() {
+  if (bonusActive) return;
   const need = waveParams(wave).perWave;
   if (snapsInWave >= need) {
     wave += 1;
@@ -668,7 +946,12 @@ function maybeAdvanceWave() {
     audio.setWaveLayer?.(wave);
     setHint(t('wave', wave));
     showCombo(t('wave', wave));
+    const hadPortal = portalSpawnWave >= 0;
     spawnWaveField();
+    if (hadPortal) {
+      portalSpawnWave = -1;
+      relicsCollected = 0;
+    }
   }
 }
 
@@ -699,7 +982,8 @@ function applySunGrowth() {
 
 
 function activateAutoAlign() {
-  if (!started || over || state !== STATE.PLAY || endingCinematic) return;
+  if (!started || over || endingCinematic) return;
+  if (state !== STATE.PLAY && state !== STATE.BONUS) return;
   if (autoAlignActive) return;
   if (!autoAlignReady) {
     setHint(`${t('lock')} ${lockStreak}/${LOCK_STREAK_NEED}`);
@@ -739,6 +1023,10 @@ function goToMenu() {
   $('coachFlow')?.classList.remove('on');
   $('start')?.classList.add('on');
   clearWorld?.();
+  clearBonusGroup();
+  bonusActive = false;
+  relicsCollected = 0;
+  applyBonusLook(false);
   if (craft) craft.visible = true;
   if (sun) sun.visible = true;
   if (sunGlow) sunGlow.visible = true;
@@ -749,11 +1037,15 @@ function goToMenu() {
 }
 
 function startRun() {
-  if (started && !over && state === STATE.PLAY) return;
+  if (started && !over && (state === STATE.PLAY || state === STATE.BONUS)) return;
   score = 0; wave = 1; lives = 5; combo = 0; bestCombo = 0; snapsInWave = 0;
   perfectStreak = 0; heatOn = false;
   playElapsed = 0; over = false; started = true; state = STATE.PLAY;
   endingCinematic = false;
+  relicsCollected = 0; bonusActive = false; bonusTimer = 0; bonusSnaps = 0;
+  bonusLifeGranted = false; portalSpawnWave = -1;
+  clearBonusGroup();
+  applyBonusLook(false);
   zoom = 1; camDist = 110;
   craftTheta = 0.4;
   orbitSpeed = waveParams(1).baseSpeed;
@@ -787,6 +1079,11 @@ function endRun() {
   endingCinematic = true;
   over = true;
   state = STATE.OVER;
+  if (bonusActive) {
+    bonusActive = false;
+    clearBonusGroup();
+    applyBonusLook(false);
+  }
   $('hud')?.classList.remove('on');
   // BIG cinematic KO — sun + system shatter, flash, camera punch
   audio.stingExplosion?.();
@@ -1088,7 +1385,7 @@ function bindInput(canvas) {
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
     e.preventDefault();
-    if (!started || over || state !== STATE.PLAY) return;
+    if (!started || over || (state !== STATE.PLAY && state !== STATE.BONUS)) return;
     activateAutoAlign();
   });
   $('btnHelp')?.addEventListener('click', (e) => {
@@ -1268,6 +1565,8 @@ function publishGame() {
     state,
     wave,
     lives,
+    bonus: bonusActive,
+    relicsCollected,
   };
 }
 
@@ -1338,7 +1637,7 @@ function frame(now) {
     }
 
     // Near-miss sparks for relics approaching sweet spot
-    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.42 && align < 0.55 && vfx && Math.random() < dt * 16) {
+    if (bestTarget && bestTarget.kind !== KIND.DEBRIS && align >= 0.42 && align < 0.55 && vfx && Math.random() < dt * (bonusActive ? 28 : 16)) {
       vfx.nearMissBurst(bestTarget.mesh.position);
     }
 
@@ -1347,8 +1646,14 @@ function frame(now) {
       o.mesh.rotation.y += o.spin * dt;
       if (o.kind === KIND.STAR) o.mesh.rotation.z += o.spin * 0.7 * dt;
       if (o.kind === KIND.DEBRIS) o.mesh.rotation.x += o.spin * 1.2 * dt;
+      if (o.kind === KIND.PORTAL || o.kind === KIND.BONUS) {
+        o.mesh.rotation.z += o.spin * 0.5 * dt;
+        const rings = o.mesh.userData?.portalRings;
+        if (rings) for (const r of rings) r.rotation.z += dt * 0.8;
+      }
     }
 
+    tickBonus(dt);
     updateHud();
   }
 
@@ -1372,6 +1677,7 @@ function frame(now) {
       alignT: align,
       sunScale,
       heat: heatOn,
+      bonus: bonusActive,
     });
   }
 
