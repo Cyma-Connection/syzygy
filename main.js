@@ -591,7 +591,8 @@ function doSnap() {
   }
 
   const stackLabel = tags.length ? ` +${tags.join('+')}` : '';
-  showCombo(`${grade}${combo > 1 ? ` x${combo}` : ''}${heatOn ? ' HEAT' : ''}${stackLabel}`);
+  const gradeLabel = grade === 'PERFECT' ? t('gradePerfect') : grade;
+  showCombo(`${gradeLabel}${combo > 1 ? ` x${combo}` : ''}${heatOn ? ' HEAT' : ''}${stackLabel}`);
   setHint(`+${gained}`);
 
   // Consume primary; also consume stacked allies on the ray for juice
@@ -1132,13 +1133,14 @@ function bindInput(canvas) {
   $('btnSubmit')?.addEventListener('click', async () => {
     const name = ($('nameIn')?.value || 'ANON').trim().slice(0, 12) || 'ANON';
     localStorage.setItem('syzygy_tag', name);
-    saveLocal(name, score, wave);
     $('btnSubmit').textContent = t('saving');
     try {
+      // submitGlobal → saveLocal once (was double-saving identical rows)
       await submitGlobal(name, score, playElapsed, wave);
       $('btnSubmit').textContent = t('saved');
     } catch (err) {
       console.warn(err);
+      saveLocal(name, score, wave);
       $('btnSubmit').textContent = t('localSaved');
     }
     renderOverRanks({ saved: true });
