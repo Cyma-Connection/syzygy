@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=diff1';
-import { createSpaceAudio } from './audio.js?v=diff1';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=diff1';
-import { createVfx } from './vfx.js?v=diff1';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=diff1';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=diff1';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=diff1';
+import { ASSET } from './assetlib.js?v=diff2';
+import { createSpaceAudio } from './audio.js?v=diff2';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=diff2';
+import { createVfx } from './vfx.js?v=diff2';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=diff2';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=diff2';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=diff2';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -144,9 +144,19 @@ function placeCraft() {
   updateSyzygyGuide();
 }
 
+/** Pro starts +4 waves into the curve (feel + score scale together). */
+function difficultyWaveShift() {
+  return getDiff() === 'pro' ? 4 : 0;
+}
+
+/** Wave index used for scoring — same total ≈ same skill band in either mode. */
+function scoreWave() {
+  return wave + difficultyWaveShift();
+}
+
 function waveParams(w) {
-  // Beginner: gentle early waves. Pro: start already in the "fun-fast" band (as if +4 waves).
-  const eff = w + (getDiff() === 'pro' ? 4 : 0);
+  // Beginner: gentle early. Pro: same curve shifted (+4) so it starts already fast.
+  const eff = w + difficultyWaveShift();
   if (eff <= 3) {
     return {
       baseSpeed: 0.30 + eff * 0.038,
@@ -898,8 +908,9 @@ function doSnap() {
   if (freezeFrames > 0) return;
 
   computeAlignment();
-  const perf = perfectBand(wave);
-  const good = goodBand(wave);
+  const bandW = scoreWave(); // same band as Pro speed curve
+  const perf = perfectBand(bandW);
+  const good = goodBand(bandW);
   const target = bestTarget;
 
   // Portal: reachable even amid wave clutter (softer gate, never wiped by waves)
@@ -971,7 +982,7 @@ function doSnap() {
   updateHeat();
   const { bonus, tags } = stackBonus(target);
   const heatMult = heatOn ? 2 : 1;
-  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (wave - 1) * 0.05) * heatMult * bonus);
+  const gained = Math.floor(pts * Math.max(1, combo) * (1 + (scoreWave() - 1) * 0.05) * heatMult * bonus);
   score += gained;
   bestCombo = Math.max(bestCombo, combo);
   snapsInWave += 1;
@@ -1255,7 +1266,7 @@ function endRun() {
       if (beat) {
         if (nameIn) nameIn.value = 'Bot 404';
         localStorage.setItem('syzygy_tag', 'Bot 404');
-        saveLocal('Bot 404', score, wave);
+        saveLocal('Bot 404', score, wave, getDiff());
         overScoreSaved = true;
         renderOverRanks({ saved: true });
         const btn = $('btnSubmit');
@@ -1586,11 +1597,11 @@ function bindInput(canvas) {
     if (nameIn) nameIn.readOnly = true;
     try {
       // submitGlobal → saveLocal once
-      await submitGlobal(name, score, playElapsed, wave);
+      await submitGlobal(name, score, playElapsed, wave, getDiff());
       if (btn) btn.textContent = t('saved');
     } catch (err) {
       console.warn(err);
-      saveLocal(name, score, wave);
+      saveLocal(name, score, wave, getDiff());
       if (btn) btn.textContent = t('localSaved');
     }
     if (btn) btn.style.opacity = '0.55';
@@ -1628,7 +1639,7 @@ function renderOverRanks(opts = {}) {
   }
   el.innerHTML = `<table>${top.map((r, i) => {
     const you = r._you || r.name === 'YOU';
-    return `<tr class="${you ? 'you' : ''}"><td>${i + 1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`;
+    return `<tr class="${you ? 'you' : ''}"><td>${i + 1}. ${escapeHtml(r.name)}${r.diff === 'pro' ? ' ·PRO' : ''}</td><td>${r.score}</td></tr>`;
   }).join('')}</table>`;
 }
 
@@ -1646,7 +1657,7 @@ function renderBoard(rows) {
   if (!lb) return;
   if (!rows.length) { lb.innerHTML = `<em>${t('lbEmpty')}</em>`; return; }
   lb.innerHTML = `<table>${rows.slice(0, 30).map((r, i) =>
-    `<tr><td>${i + 1}. ${escapeHtml(r.name)}</td><td>${r.score}</td></tr>`
+    `<tr><td>${i + 1}. ${escapeHtml(r.name)}${r.diff === 'pro' ? ' ·PRO' : ''}</td><td>${r.score}</td></tr>`
   ).join('')}</table>`;
 }
 

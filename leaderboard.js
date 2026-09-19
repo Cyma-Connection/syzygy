@@ -8,6 +8,7 @@ function normalizeEntry(r) {
     name: String(r?.name || 'ANON').slice(0, 12).toUpperCase(),
     score: Math.floor(Number(r?.score) || 0),
     wave: Math.floor(Number(r?.wave) || 1),
+    diff: (r?.diff === 'pro' || r?.diff === 'beginner') ? r.diff : 'beginner',
     at: Number(r?.at) || Date.now(),
   };
 }
@@ -38,7 +39,7 @@ export function loadLocal() {
   }
 }
 
-export function saveLocal(name, score, wave) {
+export function saveLocal(name, score, wave, diff = 'beginner') {
   let list = [];
   try {
     const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
@@ -47,7 +48,7 @@ export function saveLocal(name, score, wave) {
     list = [];
   }
   // Always append this run (even below personal / global best)
-  list.push(normalizeEntry({ name, score, wave, at: Date.now() }));
+  list.push(normalizeEntry({ name, score, wave, diff, at: Date.now() }));
   const top = rankList(list).slice(0, TOP_N);
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(top));
@@ -64,7 +65,7 @@ export async function fetchGlobal() {
   }));
 }
 
-export async function submitGlobal(name, score, playSeconds, wave) {
-  const top = saveLocal(name, score, wave);
+export async function submitGlobal(name, score, playSeconds, wave, diff = 'beginner') {
+  const top = saveLocal(name, score, wave, diff);
   return { ok: true, local: true, top };
 }
