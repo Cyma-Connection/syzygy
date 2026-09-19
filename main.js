@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=altfix3';
-import { createSpaceAudio } from './audio.js?v=altfix3';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=altfix3';
-import { createVfx } from './vfx.js?v=altfix3';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=altfix3';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=altfix3';
-import { t, applyDom, toggleLang, setLang, coachScreens, getLang } from './i18n.js?v=altfix3';
+import { ASSET } from './assetlib.js?v=diff1';
+import { createSpaceAudio } from './audio.js?v=diff1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=diff1';
+import { createVfx } from './vfx.js?v=diff1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=diff1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=diff1';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=diff1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -145,18 +145,19 @@ function placeCraft() {
 }
 
 function waveParams(w) {
-  // Waves 1–3 gentler (mobile-fair); clearer ramp after 5–8.
-  if (w <= 3) {
+  // Beginner: gentle early waves. Pro: start already in the "fun-fast" band (as if +4 waves).
+  const eff = w + (getDiff() === 'pro' ? 4 : 0);
+  if (eff <= 3) {
     return {
-      baseSpeed: 0.30 + w * 0.038,          // ~0.34–0.41
-      soft: 0.38 - w * 0.012,               // generous soft window
+      baseSpeed: 0.30 + eff * 0.038,
+      soft: 0.38 - eff * 0.012,
       perWave: 5,
-      maxObjects: 3 + w,                    // 4–6
-      debrisChance: 0.015 + w * 0.008,      // sparse debris
+      maxObjects: 3 + eff,
+      debrisChance: 0.015 + eff * 0.008,
     };
   }
-  if (w <= 5) {
-    const t = w - 3;
+  if (eff <= 5) {
+    const t = eff - 3;
     return {
       baseSpeed: 0.42 + t * 0.05,
       soft: Math.max(0.22, 0.34 - t * 0.03),
@@ -165,8 +166,7 @@ function waveParams(w) {
       debrisChance: 0.045 + t * 0.018,
     };
   }
-  // Wave 6+: clearer ramp through 5–8 and beyond (still fair on mobile)
-  const t = w - 5;
+  const t = eff - 5;
   return {
     baseSpeed: 0.52 + t * 0.075,
     soft: Math.max(0.12, 0.28 - t * 0.016),
@@ -1539,6 +1539,17 @@ function bindInput(canvas) {
       paintMuteBtn(!!audio.muted);
     });
     // iOS/Android: pointerdown + touchend + click; stopPropagation so chrome cannot steal taps
+    el.addEventListener('pointerdown', apply);
+    el.addEventListener('touchend', apply, { passive: false });
+    el.addEventListener('click', apply);
+  }
+
+  for (const code of ['beginner', 'pro']) {
+    const el = $(`diff_${code}`);
+    if (!el) continue;
+    const apply = tapGuard(() => {
+      setDiff(code);
+    });
     el.addEventListener('pointerdown', apply);
     el.addEventListener('touchend', apply, { passive: false });
     el.addEventListener('click', apply);

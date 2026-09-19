@@ -1,5 +1,6 @@
 /** EN default + FR + ES. Persist: localStorage syzygy_lang */
 const LANGS = ['en', 'fr', 'es'];
+const DIFFS = ['beginner', 'pro'];
 
 const STR = {
   en: {
@@ -48,6 +49,11 @@ const STR = {
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'EN',
     langLabel: 'LANGUAGE',
+    diffLabel: 'DIFFICULTY',
+    diffBeginner: 'BEGINNER',
+    diffPro: 'PRO',
+    diffBeginnerDesc: "I'm new — let me discover Syzygy at my own pace!",
+    diffProDesc: "You think Syzygy scares me?",
     overRankNote: 'YOUR RUN · LOCAL RANKS',
     hull: 'HULL',
     hintPortal: 'PORTAL open · SNAP to enter Alternate worlds',
@@ -104,6 +110,11 @@ const STR = {
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'FR',
     langLabel: 'LANGUE',
+    diffLabel: 'DIFFICULTÉ',
+    diffBeginner: 'DÉBUTANT',
+    diffPro: 'JOUEUR PRO',
+    diffBeginnerDesc: "Je suis nouveau, laissez-moi découvrir Syzygy tranquillement !",
+    diffProDesc: "Tu crois que Syzygy me fait peur ?",
     overRankNote: 'TA RUN · CLASSEMENT LOCAL',
     hull: 'COQUE',
     hintPortal: 'PORTAIL ouvert · SNAP pour les Mondes alternatifs',
@@ -160,6 +171,11 @@ const STR = {
     snapsLeft: (n) => `→ ${n} SNAP${n === 1 ? '' : 'S'}`,
     langBtn: 'ES',
     langLabel: 'IDIOMA',
+    diffLabel: 'DIFICULTAD',
+    diffBeginner: 'PRINCIPIANTE',
+    diffPro: 'JUGADOR PRO',
+    diffBeginnerDesc: "Soy nuevo, ¡déjame descubrir Syzygy con calma!",
+    diffProDesc: "¿Crees que Syzygy me da miedo?",
     overRankNote: 'TU RUN · RANKING LOCAL',
     hull: 'CASCO',
     hintPortal: 'PORTAL abierto · SNAP a los Mundos alternativos',
@@ -178,8 +194,16 @@ try {
   if (LANGS.includes(saved)) lang = saved;
 } catch (_) {}
 
+let difficulty = 'beginner';
+try {
+  const d = localStorage.getItem('syzygy_diff');
+  if (DIFFS.includes(d)) difficulty = d;
+} catch (_) {}
+
 export function getLang() { return lang; }
 export function listLangs() { return LANGS.slice(); }
+export function getDiff() { return difficulty; }
+export function listDiffs() { return DIFFS.slice(); }
 
 export function t(key, ...args) {
   const pack = STR[lang] || STR.en;
@@ -211,6 +235,25 @@ function syncLangChips() {
   if (lab) lab.textContent = t('langLabel');
 }
 
+function syncDiffChips() {
+  for (const code of DIFFS) {
+    const el = $(`diff_${code}`);
+    if (!el) continue;
+    el.classList.toggle('on', code === difficulty);
+    el.setAttribute('aria-pressed', code === difficulty ? 'true' : 'false');
+  }
+  const lab = $('diffLabel');
+  if (lab) lab.textContent = t('diffLabel');
+  const name = $('diffName');
+  if (name) name.textContent = difficulty === 'pro' ? t('diffPro') : t('diffBeginner');
+  const desc = $('diffDesc');
+  if (desc) desc.textContent = difficulty === 'pro' ? t('diffProDesc') : t('diffBeginnerDesc');
+  const bBeg = $('diff_beginner');
+  if (bBeg) bBeg.textContent = t('diffBeginner');
+  const bPro = $('diff_pro');
+  if (bPro) bPro.textContent = t('diffPro');
+}
+
 /** Re-apply static DOM strings for current lang. */
 export function applyDom() {
   document.documentElement.lang = lang;
@@ -240,6 +283,7 @@ export function applyDom() {
   const aa = $('btnAutoAlign');
   if (aa) aa.title = `${t('fix')} — ${t('fixReady')} · Space`;
   syncLangChips();
+  syncDiffChips();
   const flow = $('coachFlow');
   if (flow?.classList.contains('on') && typeof window.__syzygyPaintCoach === 'function') {
     window.__syzygyPaintCoach();
@@ -251,6 +295,13 @@ export function setLang(next) {
   try { localStorage.setItem('syzygy_lang', lang); } catch (_) {}
   applyDom();
   return lang;
+}
+
+export function setDiff(next) {
+  difficulty = DIFFS.includes(next) ? next : 'beginner';
+  try { localStorage.setItem('syzygy_diff', difficulty); } catch (_) {}
+  applyDom();
+  return difficulty;
 }
 
 /** Cycle EN → FR → ES → EN (corner button). */
