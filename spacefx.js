@@ -145,7 +145,7 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
   // dust stays on mid for ecliptic depth
   layerMid.add(dust);
 
-  // --- Decorative far traffic (non-interactive, not in game world) ---
+  // --- Decorative far traffic: fast flybys (non-interactive) ---
   const traffic = new THREE.Group();
   traffic.name = 'spaceTraffic';
   group.add(traffic);
@@ -175,7 +175,7 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
     const g = new THREE.Group();
     const headCol = tintCold ? cold : amber;
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(1.1, 8, 6),
+      new THREE.SphereGeometry(1.4, 8, 6),
       new THREE.MeshBasicMaterial({
         color: headCol,
         transparent: true,
@@ -185,20 +185,19 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
       })
     );
     g.add(head);
-    // Short glowing trail as boxes
-    for (let i = 0; i < 4; i++) {
-      const s = 0.7 - i * 0.12;
+    for (let i = 0; i < 5; i++) {
+      const s = 0.85 - i * 0.12;
       const box = new THREE.Mesh(
-        new THREE.BoxGeometry(s * 0.5, s * 0.5, s * 2.2),
+        new THREE.BoxGeometry(s * 0.45, s * 0.45, s * 3.2),
         new THREE.MeshBasicMaterial({
           color: i < 2 ? headCol : (tintCold ? amber : cold),
           transparent: true,
-          opacity: 0.55 - i * 0.1,
+          opacity: 0.6 - i * 0.09,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
         })
       );
-      box.position.z = 1.6 + i * 1.5;
+      box.position.z = 2.2 + i * 1.8;
       g.add(box);
     }
     return g;
@@ -206,77 +205,79 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
 
   function makeSaucer() {
     const g = new THREE.Group();
-    const disk = new THREE.Mesh(
-      new THREE.CylinderGeometry(2.4, 2.8, 0.35, 12),
-      coldMat(0.7)
-    );
+    const disk = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.2, 0.4, 12), coldMat(0.75));
     const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(1.05, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
-      coldMat(0.85)
+      new THREE.SphereGeometry(1.2, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      coldMat(0.9)
     );
-    dome.position.y = 0.35;
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(2.2, 0.08, 6, 16),
-      amberMat(0.35)
-    );
+    dome.position.y = 0.4;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.1, 6, 16), amberMat(0.4));
     rim.rotation.x = Math.PI / 2;
     g.add(disk, dome, rim);
     return g;
   }
 
   function makeRocket() {
-    // Geometry-only Falcon-evocative: white body, dark stripe, nose, optional fins, soft exhaust
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 5.2, 8), whiteMat());
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.6, 1.15), darkMat());
-    stripe.position.x = 0.5;
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.4, 8), whiteMat());
-    nose.position.y = 3.2;
-    // Grid fins as small boxes near top
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.72, 6.2, 8), whiteMat());
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 5.4, 1.3), darkMat());
+    stripe.position.x = 0.55;
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.6, 8), whiteMat());
+    nose.position.y = 3.8;
     for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        if (sx === sz) continue; // keep to 2 fins (cheap)
-        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.55), darkMat());
-        fin.position.set(sx * 0.85, 1.6, sz * 0.15);
-        g.add(fin);
-      }
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 0.65), darkMat());
+      fin.position.set(sx * 0.95, 1.8, 0);
+      g.add(fin);
     }
-    const exhaust = new THREE.Mesh(
-      new THREE.ConeGeometry(0.45, 1.6, 6),
-      amberMat(0.55)
-    );
-    exhaust.position.y = -3.2;
+    const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.2, 6), amberMat(0.65));
+    exhaust.position.y = -3.9;
     exhaust.rotation.x = Math.PI;
     g.add(body, stripe, nose, exhaust);
     g.userData.exhaust = exhaust;
     return g;
   }
 
-  function randOrbit() {
-    const r = 150 + Math.random() * 170; // ~150–320
-    const theta = Math.random() * Math.PI * 2;
-    const phi = (Math.random() - 0.5) * 0.7; // stay near ecliptic band
-    const y = Math.sin(phi) * r * 0.45 + (Math.random() - 0.5) * 40;
+  /** Straight-line flyby across the sky — visible motion, then recycle. */
+  function randFlyby(kind) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const y = (Math.random() - 0.5) * 90;
+    const z = -40 - Math.random() * 120;
+    const x0 = side * (140 + Math.random() * 80);
+    let vx, vy, vz;
+    if (kind === 'comet') {
+      // Fast diagonal streak
+      vx = -side * (55 + Math.random() * 45);
+      vy = (Math.random() - 0.5) * 18;
+      vz = (Math.random() - 0.5) * 25;
+    } else if (kind === 'rocket') {
+      // Climb past camera
+      vx = (Math.random() - 0.5) * 12;
+      vy = 28 + Math.random() * 22;
+      vz = -8 - Math.random() * 10;
+    } else {
+      // Saucer cruise
+      vx = -side * (22 + Math.random() * 18);
+      vy = Math.sin(Math.random() * 6) * 6;
+      vz = (Math.random() - 0.5) * 14;
+    }
     return {
-      r,
-      theta,
-      y,
-      speed: 0.04 + Math.random() * 0.07,
-      spin: (Math.random() - 0.5) * 0.4,
+      x: x0,
+      y: kind === 'rocket' ? -70 - Math.random() * 30 : y,
+      z,
+      vx,
+      vy,
+      vz,
+      spin: (Math.random() - 0.5) * 1.2,
       phase: Math.random() * Math.PI * 2,
+      life: 0,
+      maxLife: kind === 'comet' ? 7 + Math.random() * 4 : 10 + Math.random() * 6,
     };
   }
 
-  function placeTraffic(mesh, o) {
-    mesh.position.set(
-      Math.cos(o.theta) * o.r,
-      o.y,
-      Math.sin(o.theta) * o.r
-    );
-    // Face roughly along travel (tangential)
-    const tx = -Math.sin(o.theta);
-    const tz = Math.cos(o.theta);
-    mesh.lookAt(mesh.position.x + tx, mesh.position.y, mesh.position.z + tz);
+  function placeFlyby(mesh, o) {
+    mesh.position.set(o.x, o.y, o.z);
+    const len = Math.hypot(o.vx, o.vy, o.vz) || 1;
+    mesh.lookAt(o.x + o.vx / len * 8, o.y + o.vy / len * 8, o.z + o.vz / len * 8);
   }
 
   function spawnTraffic(kind, count) {
@@ -285,17 +286,18 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
       if (kind === 'comet') mesh = makeComet(i % 2 === 0);
       else if (kind === 'saucer') mesh = makeSaucer();
       else mesh = makeRocket();
-      const o = randOrbit();
-      if (kind === 'rocket') o.speed *= 0.7;
-      if (kind === 'saucer') o.speed *= 0.55;
-      placeTraffic(mesh, o);
+      const o = randFlyby(kind);
+      // stagger so not all spawn same frame
+      o.life = -i * (kind === 'comet' ? 1.2 : 2.5) - Math.random() * 2;
+      placeFlyby(mesh, o);
+      if (o.life < 0) mesh.visible = false;
       traffic.add(mesh);
       trafficItems.push({ kind, mesh, o });
     }
   }
 
-  spawnTraffic('comet', 2);
-  spawnTraffic('saucer', 1);
+  spawnTraffic('comet', 3);
+  spawnTraffic('saucer', 2);
   spawnTraffic('rocket', 2);
 
   return {
@@ -308,23 +310,42 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
       near.rotation.y += dt * 0.008;
       dust.rotation.y += dt * 0.01;
 
-      // Far decorative traffic — slow orbits, recycle angle
       for (const item of trafficItems) {
         const o = item.o;
-        o.theta += o.speed * dt * (o.r > 220 ? 0.85 : 1.1);
-        if (o.theta > Math.PI * 2) o.theta -= Math.PI * 2;
-        // gentle vertical drift
-        o.y += Math.sin(t * 0.15 + o.phase) * dt * 1.2;
-        o.y = Math.max(-80, Math.min(80, o.y));
-        placeTraffic(item.mesh, o);
+        o.life += dt;
+        if (o.life < 0) {
+          item.mesh.visible = false;
+          continue;
+        }
+        item.mesh.visible = true;
+        o.x += o.vx * dt;
+        o.y += o.vy * dt;
+        o.z += o.vz * dt;
+        // saucer gentle bob
+        if (item.kind === 'saucer') {
+          o.y += Math.sin(t * 1.4 + o.phase) * dt * 4;
+        }
+        placeFlyby(item.mesh, o);
         item.mesh.rotation.z += o.spin * dt;
         if (item.kind === 'rocket' && item.mesh.userData.exhaust) {
-          const pulse = 0.4 + 0.35 * Math.sin(t * 6 + o.phase);
+          const pulse = 0.45 + 0.4 * Math.sin(t * 14 + o.phase);
           item.mesh.userData.exhaust.material.opacity = pulse;
-          item.mesh.userData.exhaust.scale.setScalar(0.85 + pulse * 0.4);
+          item.mesh.userData.exhaust.scale.setScalar(0.9 + pulse * 0.55);
         }
         if (item.kind === 'comet') {
-          item.mesh.scale.setScalar(0.9 + 0.12 * Math.sin(t * 2.2 + o.phase));
+          item.mesh.scale.setScalar(1.0 + 0.15 * Math.sin(t * 5 + o.phase));
+        }
+        const farOut =
+          o.life > o.maxLife ||
+          Math.abs(o.x) > 280 ||
+          Math.abs(o.y) > 160 ||
+          o.z > 80 ||
+          o.z < -260;
+        if (farOut) {
+          const next = randFlyby(item.kind);
+          Object.assign(o, next);
+          o.life = -0.4 - Math.random() * 2.5;
+          item.mesh.visible = false;
         }
       }
 
@@ -332,7 +353,6 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
       const cx = opts.camX || 0;
       const cy = opts.camY || 0;
       const cz = opts.camZ || 0;
-      // Subtle parallax — far least, near most; also nudge with zoom
       const zoomNudge = (z - 1) * 2.2;
       layerFar.position.set(cx * 0.012, cy * 0.006 + zoomNudge * 0.15, cz * 0.012);
       layerMid.position.set(cx * 0.028, cy * 0.014 + zoomNudge * 0.35, cz * 0.028);
@@ -350,6 +370,7 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
     },
   };
 }
+
 
 export function createSunGlow(amber = 0xe8a04a, cold = 0x6b8cff) {
   const g = new THREE.Group();

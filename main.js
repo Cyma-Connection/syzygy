@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=ambience1';
-import { createSpaceAudio } from './audio.js?v=ambience1';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=ambience1';
-import { createVfx } from './vfx.js?v=ambience1';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=ambience1';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=ambience1';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=ambience1';
+import { ASSET } from './assetlib.js?v=ambience3';
+import { createSpaceAudio } from './audio.js?v=ambience3';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=ambience3';
+import { createVfx } from './vfx.js?v=ambience3';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=ambience3';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=ambience3';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=ambience3';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -1552,6 +1552,7 @@ function bindInput(canvas) {
     const el = $(`lang_${code}`);
     if (!el) continue;
     const apply = tapGuard(() => {
+      audio.startMenuAmbient?.();
       setLang(code);
       updateHud();
       paintCoach();
@@ -1563,10 +1564,16 @@ function bindInput(canvas) {
     el.addEventListener('click', apply);
   }
 
+  // Any menu chip tap also unlocks ambient (iOS often needs a control gesture)
+  const menuAmbientUnlock = () => { if (!(started && !over)) audio.startMenuAmbient?.(); };
+  for (const code of ['en', 'fr', 'es']) {
+    $(`lang_${code}`)?.addEventListener('pointerdown', menuAmbientUnlock);
+  }
   for (const code of ['beginner', 'pro']) {
     const el = $(`diff_${code}`);
     if (!el) continue;
     const apply = tapGuard(() => {
+      audio.startMenuAmbient?.();
       setDiff(code);
     });
     el.addEventListener('pointerdown', apply);
@@ -1581,6 +1588,7 @@ function bindInput(canvas) {
   $('btnMute')?.addEventListener('pointerdown', muteTap);
   $('btnMute')?.addEventListener('click', muteTap);
 
+  $('btnStart')?.addEventListener('pointerdown', () => audio.startMenuAmbient?.());
   $('btnStart')?.addEventListener('click', () => startRun());
   $('btnRetry')?.addEventListener('click', () => startRun());
   $('btnMenu')?.addEventListener('click', () => goToMenu());

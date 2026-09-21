@@ -140,32 +140,32 @@ export function createSpaceAudio() {
     menuGain.gain.value = 0.0001;
     menuGain.connect(master);
 
-    // 3 soft sparse oscillators (no noise, no melody) — much quieter than pads
+    // Phone-audible midrange (220–660 Hz) — bass alone was inaudible on mobile
     const menuSpecs = [
-      [73.42, 'sine', 0.045],     // D2
-      [110, 'sine', 0.028],       // A2 — slow fifth interval
-      [146.83, 'triangle', 0.016], // D3 air
+      [220, 'sine', 0.11],        // A3 bed
+      [329.63, 'sine', 0.07],     // E4 soft fifth
+      [440, 'triangle', 0.045],   // A4 air
+      [554.37, 'sine', 0.02],     // C#5 sparse shimmer
     ];
     for (const [f, type, g] of menuSpecs) {
       const o = ctx.createOscillator();
       o.type = type;
       o.frequency.value = f;
-      // tiny detune drift feel via slight offset on second harmonic-ish rate
       const gg = ctx.createGain();
       gg.gain.value = g;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 680;
-      lp.Q.value = 0.35;
+      lp.frequency.value = 2800;
+      lp.Q.value = 0.3;
       o.connect(lp);
       lp.connect(gg);
       gg.connect(menuGain);
       o.start();
       menuOsc.push({ o, gg, base: f });
     }
-    // Slow beat between first two for sparse lonely space feel
+    // Slow beat for lonely drift
     if (menuOsc.length >= 2) {
-      menuOsc[1].o.frequency.value = menuSpecs[1][0] * 1.003;
+      menuOsc[1].o.frequency.value = menuSpecs[1][0] * 1.0025;
     }
   }
 
@@ -250,31 +250,42 @@ export function createSpaceAudio() {
     }
   }
 
-  function startMenuAmbient() {
-    ensure();
-    if (ctx.state === 'suspended') {
-      const p = ctx.resume();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
-    }
-    if (started) return;
-    menuWanted = true;
+  function applyMenuLevels() {
+    if (!ctx || started) return;
     const t = ctx.currentTime;
     // Duck game music bus so continuous pads stay silent until PLAY
     if (music) {
       music.gain.cancelScheduledValues(t);
       music.gain.setValueAtTime(Math.max(music.gain.value, 0.0001), t);
-      music.gain.linearRampToValueAtTime(0.0001, t + 0.35);
+      music.gain.linearRampToValueAtTime(0.0001, t + 0.2);
     }
-    // Master must be up for menuGain (wired to master) to be heard
     if (master && !muted) {
       master.gain.cancelScheduledValues(t);
       master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), t);
-      master.gain.linearRampToValueAtTime(1.0, t + 0.45);
+      master.gain.linearRampToValueAtTime(1.0, t + 0.08);
     }
     if (menuGain) {
+      const target = muted ? 0.0001 : 0.85;
       menuGain.gain.cancelScheduledValues(t);
       menuGain.gain.setValueAtTime(Math.max(menuGain.gain.value, 0.0001), t);
-      menuGain.gain.linearRampToValueAtTime(muted ? 0.0001 : 0.2, t + 1.4);
+      menuGain.gain.linearRampToValueAtTime(target, t + 0.6);
+    }
+  }
+
+  function startMenuAmbient() {
+    ensure();
+    if (started) return;
+    menuWanted = true;
+    const afterResume = () => {
+      if (started || !menuWanted) return;
+      applyMenuLevels();
+    };
+    if (ctx.state === 'suspended') {
+      const p = ctx.resume();
+      if (p && typeof p.then === 'function') p.then(afterResume).catch(() => {});
+      else afterResume();
+    } else {
+      afterResume();
     }
   }
 
@@ -365,7 +376,7 @@ export function createSpaceAudio() {
         menuGain.gain.setValueAtTime(0.0001, t);
       } else if (!started && menuWanted) {
         menuGain.gain.setValueAtTime(0.0001, t);
-        menuGain.gain.linearRampToValueAtTime(0.2, t + 1.2);
+        menuGain.gain.linearRampToValueAtTime(0.85, t + 0.6);
       }
     }
     if (muted) stopLoop();
