@@ -22,6 +22,9 @@ export function createSpaceAudio() {
   let speedNorm = 0.4;
   let bonusMode = false;
   let alignOsc, alignGain;
+  let menuGain;
+  let menuOsc = [];
+  let menuWanted = false;
 
   // Audible on tiny speakers: A3 and up
   const SCALE = [0, 3, 5, 7, 10, 12, 15, 17]; // minor-ish / space
@@ -131,6 +134,39 @@ export function createSpaceAudio() {
     alignGain.connect(sfx);
     alignOsc.start();
     alignOsc._lp = alignLp;
+
+    // Menu ambient bus — separate from game music; very soft lonely drone
+    menuGain = ctx.createGain();
+    menuGain.gain.value = 0.0001;
+    menuGain.connect(master);
+
+    // 3 soft sparse oscillators (no noise, no melody) — much quieter than pads
+    const menuSpecs = [
+      [73.42, 'sine', 0.045],     // D2
+      [110, 'sine', 0.028],       // A2 — slow fifth interval
+      [146.83, 'triangle', 0.016], // D3 air
+    ];
+    for (const [f, type, g] of menuSpecs) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      // tiny detune drift feel via slight offset on second harmonic-ish rate
+      const gg = ctx.createGain();
+      gg.gain.value = g;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 680;
+      lp.Q.value = 0.35;
+      o.connect(lp);
+      lp.connect(gg);
+      gg.connect(menuGain);
+      o.start();
+      menuOsc.push({ o, gg, base: f });
+    }
+    // Slow beat between first two for sparse lonely space feel
+    if (menuOsc.length >= 2) {
+      menuOsc[1].o.frequency.value = menuSpecs[1][0] * 1.003;
+    }
   }
 
   function beep(freq, when, dur, type, gain, dest) {
@@ -214,8 +250,52 @@ export function createSpaceAudio() {
     }
   }
 
+  function startMenuAmbient() {
+    ensure();
+    if (ctx.state === 'suspended') {
+      const p = ctx.resume();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+    if (started) return;
+    menuWanted = true;
+    const t = ctx.currentTime;
+    // Duck game music bus so continuous pads stay silent until PLAY
+    if (music) {
+      music.gain.cancelScheduledValues(t);
+      music.gain.setValueAtTime(Math.max(music.gain.value, 0.0001), t);
+      music.gain.linearRampToValueAtTime(0.0001, t + 0.35);
+    }
+    // Master must be up for menuGain (wired to master) to be heard
+    if (master && !muted) {
+      master.gain.cancelScheduledValues(t);
+      master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), t);
+      master.gain.linearRampToValueAtTime(1.0, t + 0.45);
+    }
+    if (menuGain) {
+      menuGain.gain.cancelScheduledValues(t);
+      menuGain.gain.setValueAtTime(Math.max(menuGain.gain.value, 0.0001), t);
+      menuGain.gain.linearRampToValueAtTime(muted ? 0.0001 : 0.2, t + 1.4);
+    }
+  }
+
+  function stopMenuAmbient() {
+    menuWanted = false;
+    if (!ctx || !menuGain) return;
+    const t = ctx.currentTime;
+    menuGain.gain.cancelScheduledValues(t);
+    menuGain.gain.setValueAtTime(Math.max(menuGain.gain.value, 0.0001), t);
+    menuGain.gain.linearRampToValueAtTime(0.0001, t + 0.75);
+    // Restore game music bus for PLAY handoff
+    if (music) {
+      music.gain.cancelScheduledValues(t);
+      music.gain.setValueAtTime(Math.max(music.gain.value, 0.0001), t);
+      music.gain.linearRampToValueAtTime(0.95, t + 0.4);
+    }
+  }
+
   /** Call from PLAY / TAP / SNAP — must stay sync (no await before resume). */
   function start() {
+    stopMenuAmbient();
     ensure();
     if (ctx.state === 'suspended') {
       const p = ctx.resume();
@@ -279,6 +359,15 @@ export function createSpaceAudio() {
     const t = ctx.currentTime;
     master.gain.cancelScheduledValues(t);
     master.gain.setValueAtTime(muted ? 0.0001 : 1.0, t);
+    if (menuGain) {
+      menuGain.gain.cancelScheduledValues(t);
+      if (muted) {
+        menuGain.gain.setValueAtTime(0.0001, t);
+      } else if (!started && menuWanted) {
+        menuGain.gain.setValueAtTime(0.0001, t);
+        menuGain.gain.linearRampToValueAtTime(0.2, t + 1.2);
+      }
+    }
     if (muted) stopLoop();
     else if (started) startLoop();
     return muted;
@@ -359,6 +448,8 @@ export function createSpaceAudio() {
 
   return {
     start,
+    startMenuAmbient,
+    stopMenuAmbient,
     setWave,
     setWaveLayer,
     setOrbitSpeed,

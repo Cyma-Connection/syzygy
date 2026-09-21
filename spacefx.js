@@ -145,6 +145,159 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
   // dust stays on mid for ecliptic depth
   layerMid.add(dust);
 
+  // --- Decorative far traffic (non-interactive, not in game world) ---
+  const traffic = new THREE.Group();
+  traffic.name = 'spaceTraffic';
+  group.add(traffic);
+  const trafficItems = [];
+
+  const amberMat = (opacity = 0.85) =>
+    new THREE.MeshBasicMaterial({
+      color: amber,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+  const coldMat = (opacity = 0.75) =>
+    new THREE.MeshBasicMaterial({
+      color: cold,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+    });
+  const whiteMat = () =>
+    new THREE.MeshBasicMaterial({ color: 0xe8eef8, transparent: true, opacity: 0.9, depthWrite: false });
+  const darkMat = () =>
+    new THREE.MeshBasicMaterial({ color: 0x1a1e28, transparent: true, opacity: 0.92, depthWrite: false });
+
+  function makeComet(tintCold) {
+    const g = new THREE.Group();
+    const headCol = tintCold ? cold : amber;
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(1.1, 8, 6),
+      new THREE.MeshBasicMaterial({
+        color: headCol,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })
+    );
+    g.add(head);
+    // Short glowing trail as boxes
+    for (let i = 0; i < 4; i++) {
+      const s = 0.7 - i * 0.12;
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(s * 0.5, s * 0.5, s * 2.2),
+        new THREE.MeshBasicMaterial({
+          color: i < 2 ? headCol : (tintCold ? amber : cold),
+          transparent: true,
+          opacity: 0.55 - i * 0.1,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        })
+      );
+      box.position.z = 1.6 + i * 1.5;
+      g.add(box);
+    }
+    return g;
+  }
+
+  function makeSaucer() {
+    const g = new THREE.Group();
+    const disk = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.4, 2.8, 0.35, 12),
+      coldMat(0.7)
+    );
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1.05, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      coldMat(0.85)
+    );
+    dome.position.y = 0.35;
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(2.2, 0.08, 6, 16),
+      amberMat(0.35)
+    );
+    rim.rotation.x = Math.PI / 2;
+    g.add(disk, dome, rim);
+    return g;
+  }
+
+  function makeRocket() {
+    // Geometry-only Falcon-evocative: white body, dark stripe, nose, optional fins, soft exhaust
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 5.2, 8), whiteMat());
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.6, 1.15), darkMat());
+    stripe.position.x = 0.5;
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.4, 8), whiteMat());
+    nose.position.y = 3.2;
+    // Grid fins as small boxes near top
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        if (sx === sz) continue; // keep to 2 fins (cheap)
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.55), darkMat());
+        fin.position.set(sx * 0.85, 1.6, sz * 0.15);
+        g.add(fin);
+      }
+    }
+    const exhaust = new THREE.Mesh(
+      new THREE.ConeGeometry(0.45, 1.6, 6),
+      amberMat(0.55)
+    );
+    exhaust.position.y = -3.2;
+    exhaust.rotation.x = Math.PI;
+    g.add(body, stripe, nose, exhaust);
+    g.userData.exhaust = exhaust;
+    return g;
+  }
+
+  function randOrbit() {
+    const r = 150 + Math.random() * 170; // ~150–320
+    const theta = Math.random() * Math.PI * 2;
+    const phi = (Math.random() - 0.5) * 0.7; // stay near ecliptic band
+    const y = Math.sin(phi) * r * 0.45 + (Math.random() - 0.5) * 40;
+    return {
+      r,
+      theta,
+      y,
+      speed: 0.04 + Math.random() * 0.07,
+      spin: (Math.random() - 0.5) * 0.4,
+      phase: Math.random() * Math.PI * 2,
+    };
+  }
+
+  function placeTraffic(mesh, o) {
+    mesh.position.set(
+      Math.cos(o.theta) * o.r,
+      o.y,
+      Math.sin(o.theta) * o.r
+    );
+    // Face roughly along travel (tangential)
+    const tx = -Math.sin(o.theta);
+    const tz = Math.cos(o.theta);
+    mesh.lookAt(mesh.position.x + tx, mesh.position.y, mesh.position.z + tz);
+  }
+
+  function spawnTraffic(kind, count) {
+    for (let i = 0; i < count; i++) {
+      let mesh;
+      if (kind === 'comet') mesh = makeComet(i % 2 === 0);
+      else if (kind === 'saucer') mesh = makeSaucer();
+      else mesh = makeRocket();
+      const o = randOrbit();
+      if (kind === 'rocket') o.speed *= 0.7;
+      if (kind === 'saucer') o.speed *= 0.55;
+      placeTraffic(mesh, o);
+      traffic.add(mesh);
+      trafficItems.push({ kind, mesh, o });
+    }
+  }
+
+  spawnTraffic('comet', 2);
+  spawnTraffic('saucer', 1);
+  spawnTraffic('rocket', 2);
+
   return {
     group,
     skyMat,
@@ -154,6 +307,26 @@ export function createSpaceBackdrop(scene, { amber = 0xe8a04a, cold = 0x6b8cff }
       mid.rotation.y -= dt * 0.005;
       near.rotation.y += dt * 0.008;
       dust.rotation.y += dt * 0.01;
+
+      // Far decorative traffic — slow orbits, recycle angle
+      for (const item of trafficItems) {
+        const o = item.o;
+        o.theta += o.speed * dt * (o.r > 220 ? 0.85 : 1.1);
+        if (o.theta > Math.PI * 2) o.theta -= Math.PI * 2;
+        // gentle vertical drift
+        o.y += Math.sin(t * 0.15 + o.phase) * dt * 1.2;
+        o.y = Math.max(-80, Math.min(80, o.y));
+        placeTraffic(item.mesh, o);
+        item.mesh.rotation.z += o.spin * dt;
+        if (item.kind === 'rocket' && item.mesh.userData.exhaust) {
+          const pulse = 0.4 + 0.35 * Math.sin(t * 6 + o.phase);
+          item.mesh.userData.exhaust.material.opacity = pulse;
+          item.mesh.userData.exhaust.scale.setScalar(0.85 + pulse * 0.4);
+        }
+        if (item.kind === 'comet') {
+          item.mesh.scale.setScalar(0.9 + 0.12 * Math.sin(t * 2.2 + o.phase));
+        }
+      }
 
       const z = typeof opts.zoom === 'number' ? opts.zoom : 1;
       const cx = opts.camX || 0;

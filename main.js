@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=copy1';
-import { createSpaceAudio } from './audio.js?v=copy1';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=copy1';
-import { createVfx } from './vfx.js?v=copy1';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=copy1';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=copy1';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=copy1';
+import { ASSET } from './assetlib.js?v=ambience1';
+import { createSpaceAudio } from './audio.js?v=ambience1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=ambience1';
+import { createVfx } from './vfx.js?v=ambience1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=ambience1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=ambience1';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=ambience1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -341,7 +341,7 @@ function closeHelpCoach() {
 }
 
 function advanceCoach() {
-  audio.start();
+  audio.startMenuAmbient?.();
   coachIdx += 1;
   if (coachIdx >= coachScreens().length) {
     localStorage.setItem('syzygy_coach_v3', '1');
@@ -1162,6 +1162,7 @@ function goToMenu() {
   applySunGrowth?.();
   syncMenuChrome();
   publishGame();
+  audio.startMenuAmbient?.();
 }
 
 function startRun() {
@@ -1447,6 +1448,13 @@ async function boot() {
   showStartOrCoach();
   syncMenuChrome();
   $('btnCoachNext')?.addEventListener('click', (e) => { e.preventDefault(); advanceCoach(); });
+  // First tap unlocks menu ambient (not game music) until PLAY
+  const unlockMenuAmbient = () => {
+    if (started && !over) return; // already in a run
+    audio.startMenuAmbient?.();
+  };
+  document.addEventListener('pointerdown', unlockMenuAmbient, { passive: true });
+  $('start')?.addEventListener('pointerdown', unlockMenuAmbient, { passive: true });
   requestAnimationFrame(frame);
 }
 
@@ -1567,7 +1575,7 @@ function bindInput(canvas) {
   }
 
   const muteTap = tapGuard(() => {
-    audio.start(); // ensure ctx unlocked even if PLAY was skipped
+    audio.startMenuAmbient?.(); // unlock ctx + menu drone; game music waits for PLAY
     paintMuteBtn(audio.toggleMute());
   });
   $('btnMute')?.addEventListener('pointerdown', muteTap);
