@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=ambience4';
-import { createSpaceAudio } from './audio.js?v=ambience4';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=ambience4';
-import { createVfx } from './vfx.js?v=ambience4';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=ambience4';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=ambience4';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=ambience4';
+import { ASSET } from './assetlib.js?v=ambience5';
+import { createSpaceAudio } from './audio.js?v=ambience5';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=ambience5';
+import { createVfx } from './vfx.js?v=ambience5';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=ambience5';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=ambience5';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=ambience5';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -1447,14 +1447,23 @@ async function boot() {
   $('load')?.classList.add('gone');
   showStartOrCoach();
   syncMenuChrome();
+  // Try ambient as soon as the game is ready (works when browser allows autoplay;
+  // otherwise the next gesture / visibility unlocks it).
+  audio.startMenuAmbient?.();
   $('btnCoachNext')?.addEventListener('click', (e) => { e.preventDefault(); advanceCoach(); });
-  // First tap unlocks menu ambient (not game music) until PLAY
   const unlockMenuAmbient = () => {
-    if (started && !over) return; // already in a run
+    if (started && !over) return;
     audio.startMenuAmbient?.();
   };
   document.addEventListener('pointerdown', unlockMenuAmbient, { passive: true });
+  document.addEventListener('touchstart', unlockMenuAmbient, { passive: true });
+  document.addEventListener('keydown', unlockMenuAmbient);
+  window.addEventListener('pageshow', unlockMenuAmbient);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') unlockMenuAmbient();
+  });
   $('start')?.addEventListener('pointerdown', unlockMenuAmbient, { passive: true });
+  $('load')?.addEventListener('pointerdown', unlockMenuAmbient, { passive: true });
   requestAnimationFrame(frame);
 }
 

@@ -23,8 +23,14 @@ export function createSpaceAudio() {
   let bonusMode = false;
   let alignOsc, alignGain;
   let menuGain;
+  let menuPadGain;
+  let menuNoteGain;
   let menuOsc = [];
   let menuWanted = false;
+  let menuTimer = null;
+  let menuStep = 0;
+  const MENU_ROOT = 220; // A3 — phone-audible
+  const MENU_SCALE = [0, 2, 3, 5, 7, 8, 10, 12, 14, 15]; // lonely minor / space
 
   // Audible on tiny speakers: A3 and up
   const SCALE = [0, 3, 5, 7, 10, 12, 15, 17]; // minor-ish / space
@@ -135,19 +141,21 @@ export function createSpaceAudio() {
     alignOsc.start();
     alignOsc._lp = alignLp;
 
-    // Menu ambient bus — separate from game music; very soft lonely drone
+    // Menu ambient bus — separate from game music (phrases, not a fridge drone)
     menuGain = ctx.createGain();
     menuGain.gain.value = 0.0001;
     menuGain.connect(master);
 
-    // Phone-audible midrange (220–660 Hz) — bass alone was inaudible on mobile
-    const menuSpecs = [
-      [220, 'sine', 0.11],        // A3 bed
-      [329.63, 'sine', 0.07],     // E4 soft fifth
-      [440, 'triangle', 0.045],   // A4 air
-      [554.37, 'sine', 0.02],     // C#5 sparse shimmer
-    ];
-    for (const [f, type, g] of menuSpecs) {
+    menuPadGain = ctx.createGain();
+    menuPadGain.gain.value = 0.045; // barely-there bed under evolving notes
+    menuPadGain.connect(menuGain);
+
+    menuNoteGain = ctx.createGain();
+    menuNoteGain.gain.value = 0.55;
+    menuNoteGain.connect(menuGain);
+
+    // Two soft moving pads (will retune each phrase) — kept very quiet
+    for (const [f, type, g] of [[220, 'sine', 0.55], [329.63, 'sine', 0.35]]) {
       const o = ctx.createOscillator();
       o.type = type;
       o.frequency.value = f;
@@ -155,17 +163,13 @@ export function createSpaceAudio() {
       gg.gain.value = g;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 2800;
-      lp.Q.value = 0.3;
+      lp.frequency.value = 1600;
+      lp.Q.value = 0.25;
       o.connect(lp);
       lp.connect(gg);
-      gg.connect(menuGain);
+      gg.connect(menuPadGain);
       o.start();
-      menuOsc.push({ o, gg, base: f });
-    }
-    // Slow beat for lonely drift
-    if (menuOsc.length >= 2) {
-      menuOsc[1].o.frequency.value = menuSpecs[1][0] * 1.0025;
+      menuOsc.push({ o, gg, lp, base: f });
     }
   }
 
@@ -250,6 +254,86 @@ export function createSpaceAudio() {
     }
   }
 
+  function menuBeep(freq, when, dur, type, gain) {
+    if (!ctx || !menuNoteGain) return;
+    const o = ctx.createOscillator();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, when);
+    const g = ctx.createGain();
+    const peak = Math.max(0.001, gain);
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(peak, when + Math.min(0.35, dur * 0.25));
+    g.gain.linearRampToValueAtTime(0.0001, when + dur);
+    o.connect(g);
+    g.connect(menuNoteGain);
+    o.start(when);
+    o.stop(when + dur + 0.08);
+  }
+
+  function stopMenuLoop() {
+    if (menuTimer) {
+      clearTimeout(menuTimer);
+      menuTimer = null;
+    }
+  }
+
+  /** Slow evolving lonely phrases — varied notes, not a single fridge tone. */
+  function scheduleMenuPhrase() {
+    if (!ctx || !menuWanted || started || muted) return;
+    const t0 = ctx.currentTime + 0.04;
+    const chords = [
+      [0, 3, 7],
+      [0, 5, 10],
+      [2, 5, 9],
+      [0, 7, 12],
+      [3, 7, 10],
+    ];
+    const chord = chords[menuStep % chords.length];
+    menuStep += 1;
+
+    // Retune quiet pad bed toward chord root / fifth
+    if (menuOsc.length >= 2) {
+      const root = MENU_ROOT * Math.pow(2, chord[0] / 12);
+      const fifth = MENU_ROOT * Math.pow(2, chord[Math.min(2, chord.length - 1)] / 12);
+      menuOsc[0].o.frequency.setTargetAtTime(root, t0, 1.2);
+      menuOsc[1].o.frequency.setTargetAtTime(fifth, t0, 1.4);
+    }
+
+    // Soft long chord tones
+    chord.forEach((deg, i) => {
+      const f = MENU_ROOT * Math.pow(2, deg / 12);
+      menuBeep(f, t0 + i * 0.08, 3.2 + Math.random() * 0.6, i === 0 ? 'sine' : 'triangle', 0.09 - i * 0.015);
+    });
+
+    // Sparse melody notes drifting through the phrase
+    const nNotes = 4 + (menuStep % 3);
+    for (let i = 0; i < nNotes; i++) {
+      const deg = MENU_SCALE[(menuStep * 3 + i * 2) % MENU_SCALE.length];
+      const oct = (i % 5 === 4) ? 2 : 1;
+      const f = MENU_ROOT * Math.pow(2, deg / 12) * oct;
+      const when = t0 + 0.55 + i * (0.65 + (menuStep % 2) * 0.12);
+      const typ = i % 2 === 0 ? 'sine' : 'triangle';
+      menuBeep(f, when, 1.0 + Math.random() * 0.5, typ, 0.11 - i * 0.01);
+    }
+
+    // Occasional high air note
+    if (menuStep % 2 === 0) {
+      const deg = MENU_SCALE[(menuStep * 5) % MENU_SCALE.length];
+      menuBeep(MENU_ROOT * 2 * Math.pow(2, deg / 12), t0 + 2.1, 1.8, 'sine', 0.045);
+    }
+  }
+
+  function startMenuLoop() {
+    stopMenuLoop();
+    if (!menuWanted || started || muted) return;
+    const run = () => {
+      scheduleMenuPhrase();
+      const wait = 3800 + (menuStep % 3) * 400 + Math.random() * 900;
+      menuTimer = setTimeout(run, wait);
+    };
+    run();
+  }
+
   function applyMenuLevels() {
     if (!ctx || started) return;
     const t = ctx.currentTime;
@@ -265,7 +349,7 @@ export function createSpaceAudio() {
       master.gain.linearRampToValueAtTime(1.0, t + 0.08);
     }
     if (menuGain) {
-      const target = muted ? 0.0001 : 0.85;
+      const target = muted ? 0.0001 : 0.72;
       menuGain.gain.cancelScheduledValues(t);
       menuGain.gain.setValueAtTime(Math.max(menuGain.gain.value, 0.0001), t);
       menuGain.gain.linearRampToValueAtTime(target, t + 0.6);
@@ -278,12 +362,14 @@ export function createSpaceAudio() {
     menuWanted = true;
     // Sync levels inside the user-gesture stack (iOS), then again after resume
     applyMenuLevels();
+    startMenuLoop();
     if (ctx.state === 'suspended') {
       const p = ctx.resume();
       if (p && typeof p.then === 'function') {
         p.then(() => {
           if (started || !menuWanted) return;
           applyMenuLevels();
+          startMenuLoop();
         }).catch(() => {});
       }
     }
@@ -291,6 +377,7 @@ export function createSpaceAudio() {
 
   function stopMenuAmbient() {
     menuWanted = false;
+    stopMenuLoop();
     if (!ctx || !menuGain) return;
     const t = ctx.currentTime;
     menuGain.gain.cancelScheduledValues(t);
@@ -374,9 +461,11 @@ export function createSpaceAudio() {
       menuGain.gain.cancelScheduledValues(t);
       if (muted) {
         menuGain.gain.setValueAtTime(0.0001, t);
+        stopMenuLoop();
       } else if (!started && menuWanted) {
         menuGain.gain.setValueAtTime(0.0001, t);
         menuGain.gain.linearRampToValueAtTime(0.85, t + 0.6);
+        startMenuLoop();
       }
     }
     if (muted) stopLoop();
