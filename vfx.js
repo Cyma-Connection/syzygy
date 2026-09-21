@@ -7,14 +7,16 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   scene.add(root);
 
   // --- craft ion trail ---
-  // Short rear arc only (~1/4–1/3 orbit); cull by behind-angle + clear look-ahead.
-  const TRAIL_N = 56;
-  const CLEAR_AHEAD = 0.45; // rad — empty forward wedge (camera looks slightly ahead)
-  const MAX_BEHIND = 1.2; // rad — ~1/5–1/4 orbit behind craft (readable, no full-sun ring)
-  const BEHIND_EPS = 0.025;
-  const trailPos = new Float32Array(TRAIL_N * 3);
+  // Plain FIFO of recent world positions — contiguous arc only (no angular cull).
+  const TRAIL_MAX = 26;
+  const TRAIL_MIN_DIST = 0.35;
+  const TRAIL_JUMP = 25;
+  const TRAIL_BACK = 1.0;
+  const trailQueue = []; // THREE.Vector3[], oldest → newest
+  const trailPos = new Float32Array(TRAIL_MAX * 3);
   const trailGeo = new THREE.BufferGeometry();
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  trailGeo.setDrawRange(0, 0);
   const trail = new THREE.Line(
     trailGeo,
     new THREE.LineBasicMaterial({
@@ -27,13 +29,32 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
     })
   );
   root.add(trail);
-  let trailI = 0;
   let lastCraft = new THREE.Vector3();
   let lastMotion = new THREE.Vector3(0, 0, 1);
-  let orbitAngDir = 1; // +1 = increasing atan2(z,x)
+  let hasLastCraft = false;
+  let prevBonus = false;
 
-  // sparkle points along trail
-  const SPARK_N = 72;
+  function clearTrail() {
+    trailQueue.length = 0;
+    trailGeo.setDrawRange(0, 0);
+    trailGeo.attributes.position.needsUpdate = true;
+    hasLastCraft = false;
+  }
+
+  function rebuildTrailLine() {
+    const n = trailQueue.length;
+    for (let i = 0; i < n; i++) {
+      const p = trailQueue[i];
+      trailPos[i * 3] = p.x;
+      trailPos[i * 3 + 1] = p.y;
+      trailPos[i * 3 + 2] = p.z;
+    }
+    trailGeo.setDrawRange(0, n);
+    trailGeo.attributes.position.needsUpdate = true;
+  }
+
+  // sparkle points along trail (sparse — points only, never a web)
+  const SPARK_N = 36;
   const sparkPos = new Float32Array(SPARK_N * 3);
   const sparkLife = new Float32Array(SPARK_N);
   const sparkGeo = new THREE.BufferGeometry();
@@ -217,85 +238,61 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
 
   return {
     update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false } = {}) {
-      // trail — short rear arc; cull by behind-angle so look-ahead + far lap stay empty
+      // trail — FIFO of contiguous craft samples (clear on teleport / bonus enter)
+      if (bonus && !prevBonus) clearTrail();
+      prevBonus = !!bonus;
+
       if (craftPos) {
-        if (craftPos.distanceToSquared(lastCraft) > 0.18) {
-          const mx = craftPos.x - lastCraft.x;
-          const my = craftPos.y - lastCraft.y;
-          const mz = craftPos.z - lastCraft.z;
-          const mLen = Math.hypot(mx, my, mz);
-          if (mLen > 1e-6) {
-            lastMotion.set(mx / mLen, my / mLen, mz / mLen);
-          }
-          const craftTheta = Math.atan2(craftPos.z, craftPos.x);
-          const prevTheta = Math.atan2(lastCraft.z, lastCraft.x);
-          const dTheta = Math.atan2(Math.sin(craftTheta - prevTheta), Math.cos(craftTheta - prevTheta));
-          if (Math.abs(dTheta) > 1e-5) {
-            orbitAngDir = dTheta >= 0 ? 1 : -1;
+        if (hasLastCraft) {
+          const dist = craftPos.distanceTo(lastCraft);
+          if (dist > TRAIL_JUMP) {
+            clearTrail();
+          } else if (bonus && trailQueue.length >= 2) {
+            const span = trailQueue[0].distanceTo(craftPos);
+            if (span > TRAIL_JUMP * 1.2) clearTrail();
           }
 
-          // Offset opposite to motion so the newest point stays slightly behind the craft
-          const back = 1.15;
-          trailI = (trailI + 1) % TRAIL_N;
-          trailPos[trailI * 3] = craftPos.x - lastMotion.x * back;
-          trailPos[trailI * 3 + 1] = craftPos.y - lastMotion.y * back;
-          trailPos[trailI * 3 + 2] = craftPos.z - lastMotion.z * back;
+          if (!hasLastCraft || dist >= TRAIL_MIN_DIST) {
+            // Only update motion from contiguous steps (not teleports)
+            if (hasLastCraft && dist > 1e-6 && dist <= TRAIL_JUMP) {
+              lastMotion.set(
+                (craftPos.x - lastCraft.x) / dist,
+                (craftPos.y - lastCraft.y) / dist,
+                (craftPos.z - lastCraft.z) / dist
+              );
+            }
+            const sample = new THREE.Vector3(
+              craftPos.x - lastMotion.x * TRAIL_BACK,
+              craftPos.y - lastMotion.y * TRAIL_BACK,
+              craftPos.z - lastMotion.z * TRAIL_BACK
+            );
+            trailQueue.push(sample);
+            while (trailQueue.length > TRAIL_MAX) trailQueue.shift();
+            rebuildTrailLine();
+            lastCraft.copy(craftPos);
+            hasLastCraft = true;
 
-          // Walk newest→older; keep contiguous rear arc only (no full lap / no sun-crossing jump)
-          const TWO_PI = Math.PI * 2;
-          const maxBehind = Math.min(MAX_BEHIND, TWO_PI - CLEAR_AHEAD);
-          const kept = [];
-          for (let i = 0; i < TRAIL_N; i++) {
-            const src = ((trailI - i + TRAIL_N) % TRAIL_N) * 3;
-            const px = trailPos[src];
-            const py = trailPos[src + 1];
-            const pz = trailPos[src + 2];
-            // Uninitialized slots sit at origin — end of filled ring
-            if (px === 0 && py === 0 && pz === 0) break;
-            const sampleTheta = Math.atan2(pz, px);
-            // Angular distance behind craft along travel direction
-            let behind;
-            if (orbitAngDir >= 0) {
-              behind = craftTheta - sampleTheta;
-            } else {
-              behind = sampleTheta - craftTheta;
-            }
-            behind = Math.atan2(Math.sin(behind), Math.cos(behind)); // [-π, π]
-            if (behind < 0) behind += TWO_PI; // [0, 2π)
-            // Newest (i===0) always kept; older points must stay in (ε, MAX_BEHIND]
-            // Drop wrapped/older samples so the line never reconnects across the sun
-            if (i > 0 && (behind <= BEHIND_EPS || behind > maxBehind)) break;
-            kept.push(px, py, pz);
-          }
-          // Write oldest→newest into draw buffer
-          const ordered = new Float32Array(TRAIL_N * 3);
-          let write = kept.length / 3;
-          if (write === 0) {
-            ordered[0] = craftPos.x - lastMotion.x * back;
-            ordered[1] = craftPos.y - lastMotion.y * back;
-            ordered[2] = craftPos.z - lastMotion.z * back;
-            write = 1;
-          } else {
-            for (let i = 0; i < write; i++) {
-              const src = (write - 1 - i) * 3; // reverse: oldest first
-              ordered[i * 3] = kept[src];
-              ordered[i * 3 + 1] = kept[src + 1];
-              ordered[i * 3 + 2] = kept[src + 2];
+            // sparse sparks — points only, never dense enough to look like a web
+            if (speed > 12 && Math.random() < 0.35) {
+              sparkI = (sparkI + 1) % SPARK_N;
+              sparkPos[sparkI * 3] = sample.x + (Math.random() - 0.5) * 1.0;
+              sparkPos[sparkI * 3 + 1] = sample.y + (Math.random() - 0.5) * 1.0;
+              sparkPos[sparkI * 3 + 2] = sample.z + (Math.random() - 0.5) * 1.0;
+              sparkLife[sparkI] = 0.85;
+              sparkGeo.attributes.position.needsUpdate = true;
             }
           }
-          trailGeo.attributes.position.array.set(ordered);
-          trailGeo.setDrawRange(0, write);
-          trailGeo.attributes.position.needsUpdate = true;
+        } else {
+          // first sample after clear / boot
+          const sample = new THREE.Vector3(
+            craftPos.x - lastMotion.x * TRAIL_BACK,
+            craftPos.y - lastMotion.y * TRAIL_BACK,
+            craftPos.z - lastMotion.z * TRAIL_BACK
+          );
+          trailQueue.push(sample);
+          rebuildTrailLine();
           lastCraft.copy(craftPos);
-
-          if (speed > 8) {
-            sparkI = (sparkI + 1) % SPARK_N;
-            sparkPos[sparkI * 3] = craftPos.x - lastMotion.x * back + (Math.random() - 0.5) * 1.2;
-            sparkPos[sparkI * 3 + 1] = craftPos.y - lastMotion.y * back + (Math.random() - 0.5) * 1.2;
-            sparkPos[sparkI * 3 + 2] = craftPos.z - lastMotion.z * back + (Math.random() - 0.5) * 1.2;
-            sparkLife[sparkI] = 1;
-            sparkGeo.attributes.position.needsUpdate = true;
-          }
+          hasLastCraft = true;
         }
       }
 
@@ -429,6 +426,8 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
         burst.material.opacity = Math.max(0, burstT / 1.2);
       }
     },
+
+    clearTrail,
 
     setAlignHeat(t) {
       // 0..1 — called each frame when two tethered
