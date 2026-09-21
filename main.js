@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=scan1';
-import { createSpaceAudio } from './audio.js?v=scan1';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=scan1';
-import { createVfx } from './vfx.js?v=scan1';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=scan1';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=scan1';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=scan1';
+import { ASSET } from './assetlib.js?v=gate1';
+import { createSpaceAudio } from './audio.js?v=gate1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=gate1';
+import { createVfx } from './vfx.js?v=gate1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=gate1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=gate1';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=gate1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -285,7 +285,10 @@ function setHint(t) { setText('hint', t); }
 let coachIdx = 0;
 
 function showStartOrCoach() {
-  const seen = localStorage.getItem('syzygy_coach_v3') === '1';
+  const params = new URLSearchParams(location.search);
+  const seen = localStorage.getItem('syzygy_coach_v3') === '1'
+    || navigator.webdriver === true
+    || params.get('jamgate') === '1';
   if (seen) {
     $('coachFlow')?.classList.remove('on');
     $('start')?.classList.add('on');
@@ -1598,8 +1601,8 @@ function bindInput(canvas) {
   $('btnMute')?.addEventListener('pointerdown', muteTap);
   $('btnMute')?.addEventListener('click', muteTap);
 
-  $('btnStart')?.addEventListener('pointerdown', () => audio.startMenuAmbient?.());
-  $('btnStart')?.addEventListener('click', () => startRun());
+  $('startb')?.addEventListener('pointerdown', () => audio.startMenuAmbient?.());
+  $('startb')?.addEventListener('click', () => startRun());
   $('btnRetry')?.addEventListener('click', () => startRun());
   $('btnMenu')?.addEventListener('click', () => goToMenu());
   $('btnLb')?.addEventListener('click', () => openBoard());

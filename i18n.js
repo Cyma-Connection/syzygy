@@ -267,7 +267,7 @@ export function applyDom() {
   set('startTitle', t('startTitle'));
   html('startBody', t('startBody'));
   set('startStrat', t('startStrat'));
-  set('btnStart', t('play'));
+  set('startb', t('play'));
   set('btnLb', t('leaderboard'));
   set('boardTitle', t('ranks'));
   set('lbNote', t('lbNote'));
