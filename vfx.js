@@ -74,7 +74,68 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   root.add(sparks);
   let sparkI = 0;
 
+  // --- radar scan arc (stateless; rebuilt from orbit math each frame) ---
+  // Primary wake + fainter secondary trailing further back. No historical buffer.
+  const SCAN_N = 32;
+  const SCAN_ARC = 1.05;       // ~1/4 orbit behind craft
+  const SCAN_EPS = 0.07;       // stay clear of craft / forward look-ahead
+  const SCAN2_N = 20;
+  const SCAN2_ARC = 0.55;      // shorter secondary
+  const SCAN2_BACK = 0.12;     // gap past primary tip
+  const scanPos = new Float32Array(SCAN_N * 3);
+  const scanGeo = new THREE.BufferGeometry();
+  scanGeo.setAttribute('position', new THREE.BufferAttribute(scanPos, 3));
+  scanGeo.setDrawRange(0, 0);
+  const scan = new THREE.Line(
+    scanGeo,
+    new THREE.LineBasicMaterial({
+      color: amber,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      linewidth: 2,
+    })
+  );
+  root.add(scan);
+  const scan2Pos = new Float32Array(SCAN2_N * 3);
+  const scan2Geo = new THREE.BufferGeometry();
+  scan2Geo.setAttribute('position', new THREE.BufferAttribute(scan2Pos, 3));
+  scan2Geo.setDrawRange(0, 0);
+  const scan2 = new THREE.Line(
+    scan2Geo,
+    new THREE.LineBasicMaterial({
+      color: amber,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      linewidth: 1,
+    })
+  );
+  root.add(scan2);
+  let inferredOrbitDir = 1;
+  let lastScanTheta = null;
+
+  function writeScanArc(posArr, geo, n, theta0, theta1, radius, y) {
+    if (!(radius > 0.5) || n < 2) {
+      geo.setDrawRange(0, 0);
+      geo.attributes.position.needsUpdate = true;
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      const th = theta0 + (theta1 - theta0) * u;
+      posArr[i * 3] = Math.cos(th) * radius;
+      posArr[i * 3 + 1] = y;
+      posArr[i * 3 + 2] = Math.sin(th) * radius;
+    }
+    geo.setDrawRange(0, n);
+    geo.attributes.position.needsUpdate = true;
+  }
+
   // --- shooting stars ---
+
   const meteors = [];
   function spawnMeteor() {
     const dir = new THREE.Vector3(
@@ -237,7 +298,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   let meteorCD = 2;
 
   return {
-    update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false } = {}) {
+    update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false, orbitDir = null } = {}) {
       // trail — FIFO of contiguous craft samples (clear on teleport / bonus enter)
       if (bonus && !prevBonus) clearTrail();
       prevBonus = !!bonus;
@@ -311,6 +372,47 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
       trail.material.opacity = 0.5 + alignT * 0.4 + (heat ? 0.25 : 0);
       if (heat) trail.material.color.setHex(amber);
       else trail.material.color.setHex(alignT > 0.6 ? cold : amber);
+
+      // radar scan arc — pure circular wake behind craft (never a full ring / chord web)
+      if (craftPos) {
+        const cx = craftPos.x;
+        const cz = craftPos.z;
+        const radius = Math.hypot(cx, cz);
+        const craftTheta = Math.atan2(cz, cx);
+        let dir = typeof orbitDir === 'number' && orbitDir !== 0 ? Math.sign(orbitDir) : inferredOrbitDir;
+        if (lastScanTheta != null) {
+          let dth = craftTheta - lastScanTheta;
+          while (dth > Math.PI) dth -= Math.PI * 2;
+          while (dth < -Math.PI) dth += Math.PI * 2;
+          if (Math.abs(dth) > 1e-4) {
+            inferredOrbitDir = Math.sign(dth) || inferredOrbitDir;
+            if (typeof orbitDir !== 'number' || orbitDir === 0) dir = inferredOrbitDir;
+          }
+        }
+        lastScanTheta = craftTheta;
+        const y = craftPos.y;
+        // Behind along travel: craftTheta - dir * ARC … craftTheta - dir * ε
+        const tNear = craftTheta - dir * SCAN_EPS;
+        const tFar = craftTheta - dir * SCAN_ARC;
+        writeScanArc(scanPos, scanGeo, SCAN_N, tFar, tNear, radius, y);
+        const t2Near = craftTheta - dir * (SCAN_ARC + SCAN2_BACK);
+        const t2Far = craftTheta - dir * (SCAN_ARC + SCAN2_BACK + SCAN2_ARC);
+        writeScanArc(scan2Pos, scan2Geo, SCAN2_N, t2Far, t2Near, radius, y);
+        const alive = 0.38 + alignT * 0.35 + (heat ? 0.22 : 0) + Math.min(0.15, speed / 80);
+        scan.material.opacity = alive;
+        scan2.material.opacity = alive * 0.55;
+        const col = heat ? amber : alignT > 0.6 ? cold : amber;
+        scan.material.color.setHex(col);
+        scan2.material.color.setHex(col);
+        scan.visible = true;
+        scan2.visible = true;
+      } else {
+        scanGeo.setDrawRange(0, 0);
+        scan2Geo.setDrawRange(0, 0);
+        scan.visible = false;
+        scan2.visible = false;
+        lastScanTheta = null;
+      }
 
       // meteors (denser during micro-bonus)
       meteorCD -= dt;

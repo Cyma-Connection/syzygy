@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=trail4';
-import { createSpaceAudio } from './audio.js?v=trail4';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=trail4';
-import { createVfx } from './vfx.js?v=trail4';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=trail4';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=trail4';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=trail4';
+import { ASSET } from './assetlib.js?v=scan1';
+import { createSpaceAudio } from './audio.js?v=scan1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=scan1';
+import { createVfx } from './vfx.js?v=scan1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=scan1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=scan1';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=scan1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -1847,6 +1847,7 @@ function frame(now) {
       sunScale,
       heat: heatOn,
       bonus: bonusActive,
+      orbitDir,
     });
   }
 
