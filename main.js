@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=ambience5';
-import { createSpaceAudio } from './audio.js?v=ambience5';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=ambience5';
-import { createVfx } from './vfx.js?v=ambience5';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=ambience5';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=ambience5';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=ambience5';
+import { ASSET } from './assetlib.js?v=trail1';
+import { createSpaceAudio } from './audio.js?v=trail1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=trail1';
+import { createVfx } from './vfx.js?v=trail1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=trail1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=trail1';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=trail1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -393,10 +393,10 @@ function pickKind(boss) {
   }
   const r = Math.random();
   // Occasional FIX kits (safe collectibles) so FIX charge stays reachable
-  if (r < 0.09) return KIND.KIT;
-  if (r < 0.09 + p.debrisChance) return KIND.DEBRIS;
-  if (r < 0.09 + p.debrisChance + 0.18) return KIND.PLANET;
-  if (r < 0.09 + p.debrisChance + 0.36) return KIND.STAR;
+  if (r < 0.14) return KIND.KIT;
+  if (r < 0.14 + p.debrisChance) return KIND.DEBRIS;
+  if (r < 0.14 + p.debrisChance + 0.18) return KIND.PLANET;
+  if (r < 0.14 + p.debrisChance + 0.36) return KIND.STAR;
   return KIND.RELIC;
 }
 

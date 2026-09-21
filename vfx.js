@@ -7,7 +7,8 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   scene.add(root);
 
   // --- craft ion trail ---
-  const TRAIL_N = 96;
+  // Keep short so circular orbits don't wrap old segments into the look-ahead view.
+  const TRAIL_N = 32;
   const trailPos = new Float32Array(TRAIL_N * 3);
   const trailGeo = new THREE.BufferGeometry();
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
@@ -25,9 +26,10 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   root.add(trail);
   let trailI = 0;
   let lastCraft = new THREE.Vector3();
+  let lastMotion = new THREE.Vector3(0, 0, 1);
 
   // sparkle points along trail
-  const SPARK_N = 80;
+  const SPARK_N = 28;
   const sparkPos = new Float32Array(SPARK_N * 3);
   const sparkLife = new Float32Array(SPARK_N);
   const sparkGeo = new THREE.BufferGeometry();
@@ -211,31 +213,68 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
 
   return {
     update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false } = {}) {
-      // trail
+      // trail — sample slightly behind motion; drop points ahead of craft
       if (craftPos) {
         if (craftPos.distanceToSquared(lastCraft) > 0.18) {
+          const mx = craftPos.x - lastCraft.x;
+          const my = craftPos.y - lastCraft.y;
+          const mz = craftPos.z - lastCraft.z;
+          const mLen = Math.hypot(mx, my, mz);
+          if (mLen > 1e-6) {
+            lastMotion.set(mx / mLen, my / mLen, mz / mLen);
+          }
+          // Offset opposite to motion so the newest point stays behind the craft
+          const back = 1.15;
           trailI = (trailI + 1) % TRAIL_N;
-          trailPos[trailI * 3] = craftPos.x;
-          trailPos[trailI * 3 + 1] = craftPos.y;
-          trailPos[trailI * 3 + 2] = craftPos.z;
-          trailGeo.attributes.position.needsUpdate = true;
-          // reorder for continuous line: write from oldest
+          trailPos[trailI * 3] = craftPos.x - lastMotion.x * back;
+          trailPos[trailI * 3 + 1] = craftPos.y - lastMotion.y * back;
+          trailPos[trailI * 3 + 2] = craftPos.z - lastMotion.z * back;
+
+          // Rebuild oldest→newest, skip samples in the forward half-space
           const ordered = new Float32Array(TRAIL_N * 3);
+          let write = 0;
           for (let i = 0; i < TRAIL_N; i++) {
             const src = ((trailI + 1 + i) % TRAIL_N) * 3;
-            ordered[i * 3] = trailPos[src];
-            ordered[i * 3 + 1] = trailPos[src + 1];
-            ordered[i * 3 + 2] = trailPos[src + 2];
+            const px = trailPos[src];
+            const py = trailPos[src + 1];
+            const pz = trailPos[src + 2];
+            // Uninitialized slots sit at origin — skip them
+            if (px === 0 && py === 0 && pz === 0) continue;
+            const dx = px - craftPos.x;
+            const dy = py - craftPos.y;
+            const dz = pz - craftPos.z;
+            const ahead = dx * lastMotion.x + dy * lastMotion.y + dz * lastMotion.z;
+            if (ahead > 0.05) continue;
+            ordered[write * 3] = px;
+            ordered[write * 3 + 1] = py;
+            ordered[write * 3 + 2] = pz;
+            write++;
+          }
+          if (write === 0) {
+            ordered[0] = craftPos.x - lastMotion.x * back;
+            ordered[1] = craftPos.y - lastMotion.y * back;
+            ordered[2] = craftPos.z - lastMotion.z * back;
+            write = 1;
+          }
+          // Pad remaining verts with last kept point (degenerate segments, invisible)
+          const lx = ordered[(write - 1) * 3];
+          const ly = ordered[(write - 1) * 3 + 1];
+          const lz = ordered[(write - 1) * 3 + 2];
+          for (let i = write; i < TRAIL_N; i++) {
+            ordered[i * 3] = lx;
+            ordered[i * 3 + 1] = ly;
+            ordered[i * 3 + 2] = lz;
           }
           trailGeo.attributes.position.array.set(ordered);
+          trailGeo.setDrawRange(0, write);
           trailGeo.attributes.position.needsUpdate = true;
           lastCraft.copy(craftPos);
 
           if (speed > 8) {
             sparkI = (sparkI + 1) % SPARK_N;
-            sparkPos[sparkI * 3] = craftPos.x + (Math.random() - 0.5) * 1.5;
-            sparkPos[sparkI * 3 + 1] = craftPos.y + (Math.random() - 0.5) * 1.5;
-            sparkPos[sparkI * 3 + 2] = craftPos.z + (Math.random() - 0.5) * 1.5;
+            sparkPos[sparkI * 3] = craftPos.x - lastMotion.x * back + (Math.random() - 0.5) * 1.2;
+            sparkPos[sparkI * 3 + 1] = craftPos.y - lastMotion.y * back + (Math.random() - 0.5) * 1.2;
+            sparkPos[sparkI * 3 + 2] = craftPos.z - lastMotion.z * back + (Math.random() - 0.5) * 1.2;
             sparkLife[sparkI] = 1;
             sparkGeo.attributes.position.needsUpdate = true;
           }
