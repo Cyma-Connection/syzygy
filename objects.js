@@ -173,45 +173,86 @@ export function createStar(scale = 1) {
   return g;
 }
 
-/** Jagged dangerous debris — ember shards + warning octa (never soft planet). */
+/** Jagged dangerous debris — cracked instrument wreck (never soft planet). */
 export function createDebris(scale = 1) {
   const g = new THREE.Group();
   g.name = 'debris';
-  const colors = [EMBER, BRASS_DK, BONE, OBSIDIAN, BAD_GLOW];
-  for (let i = 0; i < 9; i++) {
-    const jagged = new THREE.Mesh(
-      new THREE.TetrahedronGeometry(1.25 * scale * (0.75 + Math.random() * 0.9), 0),
-      mat(colors[i % colors.length], {
-        metal: 0.55,
-        rough: 0.72,
-        emissive: i % 2 === 0 ? EMBER : BAD_GLOW,
-        ei: i % 2 === 0 ? 0.45 : 0.3,
-      })
-    );
-    const a = (i / 9) * Math.PI * 2;
-    const r = 1.0 * scale + Math.random() * 2.6 * scale;
-    jagged.position.set(Math.cos(a) * r, (Math.random() - 0.5) * 3.0 * scale, Math.sin(a) * r);
-    jagged.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    g.add(jagged);
+
+  // Cracked brass plate — thin angular hull shard
+  const plateMat = mat(BRASS, { metal: 0.62, rough: 0.42, emissive: BRASS_DK, ei: 0.18 });
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(3.4 * scale, 0.22 * scale, 2.1 * scale), plateMat);
+  plate.rotation.set(0.35, 0.55, -0.28);
+  g.add(plate);
+  const plate2 = new THREE.Mesh(new THREE.BoxGeometry(2.0 * scale, 0.18 * scale, 1.4 * scale), plateMat);
+  plate2.position.set(0.9 * scale, 0.35 * scale, -0.55 * scale);
+  plate2.rotation.set(-0.6, 0.2, 0.9);
+  g.add(plate2);
+  // Obsidian under-panel (void fitting)
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6 * scale, 0.28 * scale, 1.1 * scale),
+    mat(OBSIDIAN, { metal: 0.35, rough: 0.7, emissive: EMBER, ei: 0.12 })
+  );
+  panel.position.set(-0.7 * scale, -0.25 * scale, 0.4 * scale);
+  panel.rotation.set(0.15, -0.4, 0.5);
+  g.add(panel);
+
+  // Fixed ember tetra wedges — instrument shards, no scatter noise
+  const wedgeMat = mat(EMBER, { metal: 0.5, rough: 0.65, emissive: BAD_GLOW, ei: 0.55 });
+  const wedges = [
+    { pos: [1.15, 0.55, 0.35], rot: [0.4, 1.1, 0.2], s: 1.15 },
+    { pos: [-0.95, -0.4, 0.75], rot: [1.2, -0.3, 0.8], s: 0.95 },
+    { pos: [0.15, 0.85, -1.05], rot: [-0.6, 0.5, 1.4], s: 1.05 },
+  ];
+  for (const w of wedges) {
+    const tet = new THREE.Mesh(new THREE.TetrahedronGeometry(1.05 * scale * w.s, 0), wedgeMat);
+    tet.position.set(w.pos[0] * scale, w.pos[1] * scale, w.pos[2] * scale);
+    tet.rotation.set(w.rot[0], w.rot[1], w.rot[2]);
+    g.add(tet);
   }
-  // Angular danger silhouette (not a soft glow ball)
+
+  // Long cone spike — readable at orbit distance
+  const spike = new THREE.Mesh(
+    new THREE.ConeGeometry(0.42 * scale, 4.2 * scale, 5),
+    mat(BRASS_DK, { emissive: BAD_GLOW, ei: 0.5, metal: 0.45, rough: 0.5 })
+  );
+  spike.rotation.set(0, 0, Math.PI / 2.15);
+  spike.position.set(0.2 * scale, -0.1 * scale, 0.15 * scale);
+  g.add(spike);
+
+  // Bone fracture ticks — graduation scars on the plate
+  const tickMat = mat(BONE, { emissive: BONE, ei: 0.28, metal: 0.15, rough: 0.55 });
+  const tickPos = [
+    [-1.2, 0.2, 0.55],
+    [0.05, 0.45, 0.85],
+    [1.35, -0.15, -0.4],
+    [-0.35, -0.55, -0.9],
+  ];
+  for (const p of tickPos) {
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.18 * scale, 0.72 * scale, 0.18 * scale), tickMat);
+    tick.position.set(p[0] * scale, p[1] * scale, p[2] * scale);
+    tick.rotation.set(0.3, 0.6, -0.4);
+    g.add(tick);
+  }
+
+  // Small cold warning octa — danger cue without soft blob glow
   const warn = new THREE.Mesh(
-    new THREE.OctahedronGeometry(1.35 * scale, 0),
+    new THREE.OctahedronGeometry(0.85 * scale, 0),
+    mat(COLD, { emissive: COLD, ei: 0.85, metal: 0.2, rough: 0.3 })
+  );
+  warn.position.set(-0.2 * scale, 0.95 * scale, 0.25 * scale);
+  g.add(warn);
+  const warnGlow = new THREE.Mesh(
+    new THREE.OctahedronGeometry(1.05 * scale, 0),
     new THREE.MeshBasicMaterial({
       color: BAD_GLOW,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.28,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
   );
-  g.add(warn);
-  const spike = new THREE.Mesh(
-    new THREE.ConeGeometry(0.55 * scale, 3.8 * scale, 4),
-    mat(EMBER, { emissive: BAD_GLOW, ei: 0.6, metal: 0.4, rough: 0.55 })
-  );
-  spike.rotation.z = Math.PI / 2;
-  g.add(spike);
+  warnGlow.position.copy(warn.position);
+  g.add(warnGlow);
   return g;
 }
 
@@ -298,31 +339,58 @@ export function getBonusTierPalette(tier = 1) {
   return tierPalette(tier);
 }
 
-/** Amber+cold singularity ring — portal to micro-bonus (no textures). */
+/** Amber+cold aperture instrument — portal to micro-bonus (no textures). */
 export function createPortal(scale = 1) {
   const g = new THREE.Group();
   g.name = 'portal';
+
+  // Contained emissive core (smaller than soft teal ball)
   const core = new THREE.Mesh(
-    new THREE.SphereGeometry(1.85 * scale, 18, 14),
+    new THREE.SphereGeometry(0.95 * scale, 14, 12),
     new THREE.MeshStandardMaterial({
-      color: TEAL,
-      emissive: TEAL_LT,
+      color: AMBER,
+      emissive: AMBER,
       emissiveIntensity: 1.05,
       metalness: 0.35,
-      roughness: 0.3,
+      roughness: 0.28,
     })
   );
   g.add(core);
   g.userData.portalCore = core;
-  const inner = new THREE.Mesh(
-    new THREE.SphereGeometry(1.2 * scale, 12, 10),
+
+  // Obsidian inner void — aperture well
+  const voidCyl = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.55 * scale, 1.55 * scale, 0.55 * scale, 28, 1, true),
+    mat(OBSIDIAN, { metal: 0.4, rough: 0.65, emissive: 0x05080e, ei: 0.15 })
+  );
+  voidCyl.rotation.x = Math.PI / 2;
+  g.add(voidCyl);
+  const voidSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(1.35 * scale, 16, 12),
     new THREE.MeshBasicMaterial({
-      color: 0x050a10,
+      color: 0x05080e,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.92,
     })
   );
-  g.add(inner);
+  g.add(voidSphere);
+
+  // Outer brass torus collar
+  const collar = new THREE.Mesh(
+    new THREE.TorusGeometry(2.85 * scale, 0.28 * scale, 10, 40),
+    mat(BRASS, { emissive: AMBER, ei: 0.4, metal: 0.68, rough: 0.32 })
+  );
+  collar.rotation.x = Math.PI / 2;
+  g.add(collar);
+  // Bone graduation ticks on collar
+  const tickMat = mat(BONE, { emissive: BONE, ei: 0.3, metal: 0.2, rough: 0.5 });
+  for (let i = 0; i < 8; i++) {
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.14 * scale, 0.55 * scale, 0.14 * scale), tickMat);
+    const a = (i / 8) * Math.PI * 2;
+    tick.position.set(Math.cos(a) * 2.85 * scale, 0, Math.sin(a) * 2.85 * scale);
+    g.add(tick);
+  }
+
   const ringMat = (color, opacity) =>
     new THREE.MeshBasicMaterial({
       color,
@@ -332,32 +400,43 @@ export function createPortal(scale = 1) {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
-  const r1 = new THREE.Mesh(new THREE.RingGeometry(2.4 * scale, 3.2 * scale, 52), ringMat(AMBER, 0.8));
-  r1.rotation.x = Math.PI / 2.1;
+  // Amber + cold crossed thin rings — animated by main.js
+  const r1 = new THREE.Mesh(new THREE.TorusGeometry(2.35 * scale, 0.07 * scale, 6, 40), ringMat(AMBER, 0.85));
+  r1.rotation.x = Math.PI / 2.05;
   g.add(r1);
-  const r2 = new THREE.Mesh(new THREE.RingGeometry(3.4 * scale, 4.1 * scale, 52), ringMat(COLD, 0.55));
-  r2.rotation.x = Math.PI / 2.35;
-  r2.rotation.z = 0.4;
+  const r2 = new THREE.Mesh(new THREE.TorusGeometry(2.55 * scale, 0.06 * scale, 6, 40), ringMat(COLD, 0.7));
+  r2.rotation.x = Math.PI / 2.4;
+  r2.rotation.z = 0.55;
   g.add(r2);
-  const r3 = new THREE.Mesh(new THREE.TorusGeometry(2.9 * scale, 0.12 * scale, 8, 44), ringMat(TEAL_LT, 0.85));
-  r3.rotation.y = 0.45;
+  const r3 = new THREE.Mesh(new THREE.TorusGeometry(2.7 * scale, 0.05 * scale, 6, 36), ringMat(AMBER, 0.55));
+  r3.rotation.y = 0.85;
+  r3.rotation.x = 0.35;
   g.add(r3);
-  // Diamond tips — portal ≠ planet ring
+
+  // Four brass bracket fins (diamond tips → angular brackets)
   for (let i = 0; i < 4; i++) {
+    const fin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32 * scale, 1.15 * scale, 0.22 * scale),
+      mat(BRASS, { emissive: AMBER, ei: 0.45, metal: 0.6, rough: 0.35 })
+    );
     const tip = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.55 * scale, 0),
-      mat(AMBER, { emissive: AMBER, ei: 0.7, metal: 0.3, rough: 0.35 })
+      new THREE.OctahedronGeometry(0.38 * scale, 0),
+      mat(BONE, { emissive: COLD, ei: 0.55, metal: 0.25, rough: 0.4 })
     );
     const a = (i / 4) * Math.PI * 2 + 0.2;
-    tip.position.set(Math.cos(a) * 3.6 * scale, 0, Math.sin(a) * 3.6 * scale);
+    fin.position.set(Math.cos(a) * 3.55 * scale, 0, Math.sin(a) * 3.55 * scale);
+    tip.position.copy(fin.position);
+    tip.position.y = 0.65 * scale;
+    g.add(fin);
     g.add(tip);
   }
+
   const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(4.4 * scale, 14, 12),
+    new THREE.SphereGeometry(4.2 * scale, 14, 12),
     new THREE.MeshBasicMaterial({
-      color: TEAL,
+      color: COLD,
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.16,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -489,48 +568,74 @@ export function createBonusPlanet(scale = 1, tier = 1) {
   return g;
 }
 
-/** Bright bonus snap target orb — tint by tier. */
+/** Bright bonus snap target orb — brass/bone lattice, tint by tier. */
 export function createBonusOrb(scale = 1, tier = 1) {
   const pal = tierPalette(tier);
   const g = new THREE.Group();
   g.name = 'bonusOrb';
+
+  // Tier-tinted core (contained, not a giant glow ball)
   const core = new THREE.Mesh(
-    new THREE.SphereGeometry(1.9 * scale, 16, 12),
+    new THREE.OctahedronGeometry(1.35 * scale, 0),
     new THREE.MeshStandardMaterial({
       color: pal.orb,
       emissive: pal.orbEm,
       emissiveIntensity: 1.05,
-      metalness: 0.2,
-      roughness: 0.28,
+      metalness: 0.25,
+      roughness: 0.3,
     })
   );
   g.add(core);
+
+  // Brass / bone lattice — thin tori + box ribs (wireframe instrument feel)
+  const brassMat = mat(BRASS, { emissive: BRASS_DK, ei: 0.25, metal: 0.65, rough: 0.35 });
+  const boneMat = mat(BONE, { emissive: BONE, ei: 0.2, metal: 0.2, rough: 0.5 });
+  const hoopXY = new THREE.Mesh(new THREE.TorusGeometry(2.15 * scale, 0.07 * scale, 6, 28), brassMat);
+  g.add(hoopXY);
+  const hoopXZ = new THREE.Mesh(new THREE.TorusGeometry(2.15 * scale, 0.06 * scale, 6, 28), brassMat);
+  hoopXZ.rotation.x = Math.PI / 2;
+  g.add(hoopXZ);
+  const hoopYZ = new THREE.Mesh(new THREE.TorusGeometry(2.15 * scale, 0.055 * scale, 6, 28), boneMat);
+  hoopYZ.rotation.y = Math.PI / 2;
+  g.add(hoopYZ);
+
+  // Box ribs along octa axes
+  const ribGeo = new THREE.BoxGeometry(0.12 * scale, 0.12 * scale, 4.0 * scale);
+  for (let i = 0; i < 3; i++) {
+    const rib = new THREE.Mesh(ribGeo, i === 1 ? boneMat : brassMat);
+    if (i === 0) rib.rotation.y = Math.PI / 2;
+    if (i === 1) rib.rotation.x = Math.PI / 2;
+    g.add(rib);
+  }
+
+  // Graduation ticks (2–4) on the equatorial hoop
+  const tickCount = 2 + Math.min(2, Math.max(0, (tier | 0) - 1));
+  for (let i = 0; i < tickCount; i++) {
+    const tick = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14 * scale, 0.55 * scale, 0.14 * scale),
+      mat(BONE, { emissive: pal.orbEm, ei: 0.35, metal: 0.2, rough: 0.45 })
+    );
+    const a = (i / tickCount) * Math.PI * 2 + 0.2;
+    tick.position.set(Math.cos(a) * 2.15 * scale, 0, Math.sin(a) * 2.15 * scale);
+    g.add(tick);
+  }
+
+  // Soft tier shell — kept small so silhouette stays angular
   const shell = new THREE.Mesh(
-    new THREE.SphereGeometry(2.55 * scale, 14, 10),
+    new THREE.SphereGeometry(1.75 * scale, 12, 10),
     new THREE.MeshBasicMaterial({
       color: pal.bandB,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.22,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
   );
   g.add(shell);
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(2.75 * scale, 0.14 * scale, 6, 28),
-    new THREE.MeshBasicMaterial({
-      color: pal.skyC,
-      transparent: true,
-      opacity: 0.75,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-  );
-  ring.rotation.x = Math.PI / 2;
-  g.add(ring);
+
   if (tier >= 2) {
     const ring2 = new THREE.Mesh(
-      new THREE.TorusGeometry(3.15 * scale, 0.08 * scale, 6, 24),
+      new THREE.TorusGeometry(2.55 * scale, 0.06 * scale, 6, 24),
       new THREE.MeshBasicMaterial({
         color: AMBER,
         transparent: true,
