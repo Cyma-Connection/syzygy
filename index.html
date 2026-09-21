@@ -115,6 +115,10 @@
       animation: coachPulse 1.1s ease-in-out infinite; }
     @keyframes coachPulse { 0%,100%{ opacity:.45; transform:translateX(0)} 50%{ opacity:1; transform:translateX(8px)} }
     #start.on { display:flex; }
+    #startStrat {
+      margin:0; max-width:380px; font-size:13px; line-height:1.75; letter-spacing:.04em;
+      font-weight:700; color:var(--amber); text-align:center;
+    }
     #start #btnStart { margin-top:6px; }
     #start #btnLb { margin-top:2px; }
     /* HULL / lives — top bar only (never between sun and craft) */
@@ -221,6 +225,7 @@
   <div id="start" class="screen">
     <h2 id="startTitle">ORBIT SNAP</h2>
     <p id="startBody">Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. Collect <b style="color:var(--good)">FIX</b> kits (3 → repair +1 hull). 4 relic SNAPs → <b style="color:var(--amber)">SNAP portal</b> into the <b style="color:var(--cold)">alternate world</b>. Pinch / wheel = zoom.</p>
+    <p id="startStrat">Be strategic!</p>
     <div id="langRow">
       <div id="langLabel">LANGUAGE</div>
       <button type="button" class="langChip on" id="lang_en" data-lang="en">EN</button>
@@ -282,6 +287,6 @@
     </div>
   </div>
 
-  <script type="module" src="./main.js?v=trail1"></script>
+  <script type="module" src="./main.js?v=strat1"></script>
 </body>
 </html>

@@ -7,6 +7,7 @@ const STR = {
     loadmsg: 'calibrating ORBIT…',
     startTitle: 'ORBIT SNAP',
     startBody: 'Your craft orbits alone around the sun, getting faster and faster. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. Collect <b style="color:var(--good)">FIX</b> kits (3 → repair +1 hull) — desktop: <b style="color:var(--good)">Space</b> = FIX. 4 relic SNAPs → <b style="color:var(--amber)">SNAP portal</b> into the <b style="color:var(--cold)">Alternate worlds</b>. Pinch / wheel = zoom.',
+    startStrat: 'Be strategic!',
     play: 'PLAY',
     leaderboard: 'LEADERBOARD',
     ranks: 'RANKS',
@@ -68,6 +69,7 @@ const STR = {
     loadmsg: 'calibration ORBIT…',
     startTitle: 'ORBIT SNAP',
     startBody: 'Votre vaisseau orbite de plus en plus vite seul autour du soleil. <b style="color:var(--amber)">Sentez</b> l’alignement Soleil–Objet puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. Collectez des kits <b style="color:var(--good)">FIX</b> (3 → +1 coque) — ordi : <b style="color:var(--good)">Espace</b> = FIX. 4 SNAPs relic → <b style="color:var(--amber)">SNAP portail</b> vers les <b style="color:var(--cold)">Mondes alternatifs</b>. Pinch / molette = zoom.',
+    startStrat: 'Soyez stratégique !',
     play: 'JOUER',
     leaderboard: 'CLASSEMENT',
     ranks: 'RANGS',
@@ -129,6 +131,7 @@ const STR = {
     loadmsg: 'calibrando ÓRBITA…',
     startTitle: 'ORBIT SNAP',
     startBody: 'Tu nave orbita sola alrededor del sol, cada vez más rápido. <b style="color:var(--amber)">Siente</b> la alineación sol→objeto, luego <b style="color:var(--amber)">SNAP</b>. Escombros = peligro. Recoge kits <b style="color:var(--good)">FIX</b> (3 → +1 casco) — PC: <b style="color:var(--good)">Espacio</b> = FIX. 4 SNAPs relic → <b style="color:var(--amber)">SNAP portal</b> a los <b style="color:var(--cold)">Mundos alternativos</b>. Pellizca / rueda = zoom.',
+    startStrat: '¡Sé estratégico!',
     play: 'JUGAR',
     leaderboard: 'CLASIFICACIÓN',
     ranks: 'RANGOS',
@@ -263,6 +266,7 @@ export function applyDom() {
   set('loadmsg', t('loadmsg'));
   set('startTitle', t('startTitle'));
   html('startBody', t('startBody'));
+  set('startStrat', t('startStrat'));
   set('btnStart', t('play'));
   set('btnLb', t('leaderboard'));
   set('boardTitle', t('ranks'));
