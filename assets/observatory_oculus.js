@@ -31,9 +31,9 @@ export default function (THREE) {
   const h = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.05), (() => { const m = new THREE.MeshStandardMaterial({ color: bone, roughness: 0.4 }); m.name = "metal"; return m; })());
   h.position.y = 2.1;
   g.add(h);
-  const v = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.5, 0.05), (() => { const m = new THREE.MeshStandardMaterial({ color: bone, roughness: 0.4 }); m.name = "metal"; return m; })());
-  v.position.y = 2.1;
-  g.add(v);
+  const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.5, 0.05), (() => { const m = new THREE.MeshStandardMaterial({ color: bone, roughness: 0.4 }); m.name = "metal"; return m; })());
+  vBar.position.y = 2.1;
+  g.add(vBar);
 
   const box = new THREE.Box3(), v = new THREE.Vector3();
   g.updateMatrixWorld(true);
