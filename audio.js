@@ -276,16 +276,16 @@ export function createSpaceAudio() {
     ensure();
     if (started) return;
     menuWanted = true;
-    const afterResume = () => {
-      if (started || !menuWanted) return;
-      applyMenuLevels();
-    };
+    // Sync levels inside the user-gesture stack (iOS), then again after resume
+    applyMenuLevels();
     if (ctx.state === 'suspended') {
       const p = ctx.resume();
-      if (p && typeof p.then === 'function') p.then(afterResume).catch(() => {});
-      else afterResume();
-    } else {
-      afterResume();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          if (started || !menuWanted) return;
+          applyMenuLevels();
+        }).catch(() => {});
+      }
     }
   }
 
