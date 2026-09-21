@@ -7,9 +7,10 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   scene.add(root);
 
   // --- craft ion trail ---
-  // Long solar-perimeter arc; cull by orbit angle so look-ahead stays empty.
-  const TRAIL_N = 96;
+  // Short rear arc only (~1/4–1/3 orbit); cull by behind-angle + clear look-ahead.
+  const TRAIL_N = 56;
   const CLEAR_AHEAD = 0.45; // rad — empty forward wedge (camera looks slightly ahead)
+  const MAX_BEHIND = 1.2; // rad — ~1/5–1/4 orbit behind craft (readable, no full-sun ring)
   const BEHIND_EPS = 0.025;
   const trailPos = new Float32Array(TRAIL_N * 3);
   const trailGeo = new THREE.BufferGeometry();
@@ -216,7 +217,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
 
   return {
     update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false } = {}) {
-      // trail — long perimeter, cull by orbit angle so look-ahead wedge stays empty
+      // trail — short rear arc; cull by behind-angle so look-ahead + far lap stay empty
       if (craftPos) {
         if (craftPos.distanceToSquared(lastCraft) > 0.18) {
           const mx = craftPos.x - lastCraft.x;
@@ -240,9 +241,9 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
           trailPos[trailI * 3 + 1] = craftPos.y - lastMotion.y * back;
           trailPos[trailI * 3 + 2] = craftPos.z - lastMotion.z * back;
 
-          // Walk newest→older; keep contiguous behind-arc only (no gaps / no forward wrap)
+          // Walk newest→older; keep contiguous rear arc only (no full lap / no sun-crossing jump)
           const TWO_PI = Math.PI * 2;
-          const maxBehind = TWO_PI - CLEAR_AHEAD;
+          const maxBehind = Math.min(MAX_BEHIND, TWO_PI - CLEAR_AHEAD);
           const kept = [];
           for (let i = 0; i < TRAIL_N; i++) {
             const src = ((trailI - i + TRAIL_N) % TRAIL_N) * 3;
@@ -261,8 +262,9 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
             }
             behind = Math.atan2(Math.sin(behind), Math.cos(behind)); // [-π, π]
             if (behind < 0) behind += TWO_PI; // [0, 2π)
-            // Newest (i===0) always kept; older points must stay in (ε, 2π − clearAhead)
-            if (i > 0 && (behind <= BEHIND_EPS || behind >= maxBehind)) break;
+            // Newest (i===0) always kept; older points must stay in (ε, MAX_BEHIND]
+            // Drop wrapped/older samples so the line never reconnects across the sun
+            if (i > 0 && (behind <= BEHIND_EPS || behind > maxBehind)) break;
             kept.push(px, py, pz);
           }
           // Write oldest→newest into draw buffer
