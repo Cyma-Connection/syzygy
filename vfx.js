@@ -7,8 +7,10 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   scene.add(root);
 
   // --- craft ion trail ---
-  // Keep short so circular orbits don't wrap old segments into the look-ahead view.
-  const TRAIL_N = 32;
+  // Long solar-perimeter arc; cull by orbit angle so look-ahead stays empty.
+  const TRAIL_N = 96;
+  const CLEAR_AHEAD = 0.45; // rad — empty forward wedge (camera looks slightly ahead)
+  const BEHIND_EPS = 0.025;
   const trailPos = new Float32Array(TRAIL_N * 3);
   const trailGeo = new THREE.BufferGeometry();
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
@@ -27,9 +29,10 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
   let trailI = 0;
   let lastCraft = new THREE.Vector3();
   let lastMotion = new THREE.Vector3(0, 0, 1);
+  let orbitAngDir = 1; // +1 = increasing atan2(z,x)
 
   // sparkle points along trail
-  const SPARK_N = 28;
+  const SPARK_N = 72;
   const sparkPos = new Float32Array(SPARK_N * 3);
   const sparkLife = new Float32Array(SPARK_N);
   const sparkGeo = new THREE.BufferGeometry();
@@ -213,7 +216,7 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
 
   return {
     update(dt, { craftPos, speed = 0, alignT = 0, sunScale = 1, heat = false, bonus = false } = {}) {
-      // trail — sample slightly behind motion; drop points ahead of craft
+      // trail — long perimeter, cull by orbit angle so look-ahead wedge stays empty
       if (craftPos) {
         if (craftPos.distanceToSquared(lastCraft) > 0.18) {
           const mx = craftPos.x - lastCraft.x;
@@ -223,47 +226,60 @@ export function createVfx(scene, { amber = 0xe8a04a, cold = 0x6b8cff } = {}) {
           if (mLen > 1e-6) {
             lastMotion.set(mx / mLen, my / mLen, mz / mLen);
           }
-          // Offset opposite to motion so the newest point stays behind the craft
+          const craftTheta = Math.atan2(craftPos.z, craftPos.x);
+          const prevTheta = Math.atan2(lastCraft.z, lastCraft.x);
+          const dTheta = Math.atan2(Math.sin(craftTheta - prevTheta), Math.cos(craftTheta - prevTheta));
+          if (Math.abs(dTheta) > 1e-5) {
+            orbitAngDir = dTheta >= 0 ? 1 : -1;
+          }
+
+          // Offset opposite to motion so the newest point stays slightly behind the craft
           const back = 1.15;
           trailI = (trailI + 1) % TRAIL_N;
           trailPos[trailI * 3] = craftPos.x - lastMotion.x * back;
           trailPos[trailI * 3 + 1] = craftPos.y - lastMotion.y * back;
           trailPos[trailI * 3 + 2] = craftPos.z - lastMotion.z * back;
 
-          // Rebuild oldest→newest, skip samples in the forward half-space
-          const ordered = new Float32Array(TRAIL_N * 3);
-          let write = 0;
+          // Walk newest→older; keep contiguous behind-arc only (no gaps / no forward wrap)
+          const TWO_PI = Math.PI * 2;
+          const maxBehind = TWO_PI - CLEAR_AHEAD;
+          const kept = [];
           for (let i = 0; i < TRAIL_N; i++) {
-            const src = ((trailI + 1 + i) % TRAIL_N) * 3;
+            const src = ((trailI - i + TRAIL_N) % TRAIL_N) * 3;
             const px = trailPos[src];
             const py = trailPos[src + 1];
             const pz = trailPos[src + 2];
-            // Uninitialized slots sit at origin — skip them
-            if (px === 0 && py === 0 && pz === 0) continue;
-            const dx = px - craftPos.x;
-            const dy = py - craftPos.y;
-            const dz = pz - craftPos.z;
-            const ahead = dx * lastMotion.x + dy * lastMotion.y + dz * lastMotion.z;
-            if (ahead > 0.05) continue;
-            ordered[write * 3] = px;
-            ordered[write * 3 + 1] = py;
-            ordered[write * 3 + 2] = pz;
-            write++;
+            // Uninitialized slots sit at origin — end of filled ring
+            if (px === 0 && py === 0 && pz === 0) break;
+            const sampleTheta = Math.atan2(pz, px);
+            // Angular distance behind craft along travel direction
+            let behind;
+            if (orbitAngDir >= 0) {
+              behind = craftTheta - sampleTheta;
+            } else {
+              behind = sampleTheta - craftTheta;
+            }
+            behind = Math.atan2(Math.sin(behind), Math.cos(behind)); // [-π, π]
+            if (behind < 0) behind += TWO_PI; // [0, 2π)
+            // Newest (i===0) always kept; older points must stay in (ε, 2π − clearAhead)
+            if (i > 0 && (behind <= BEHIND_EPS || behind >= maxBehind)) break;
+            kept.push(px, py, pz);
           }
+          // Write oldest→newest into draw buffer
+          const ordered = new Float32Array(TRAIL_N * 3);
+          let write = kept.length / 3;
           if (write === 0) {
             ordered[0] = craftPos.x - lastMotion.x * back;
             ordered[1] = craftPos.y - lastMotion.y * back;
             ordered[2] = craftPos.z - lastMotion.z * back;
             write = 1;
-          }
-          // Pad remaining verts with last kept point (degenerate segments, invisible)
-          const lx = ordered[(write - 1) * 3];
-          const ly = ordered[(write - 1) * 3 + 1];
-          const lz = ordered[(write - 1) * 3 + 2];
-          for (let i = write; i < TRAIL_N; i++) {
-            ordered[i * 3] = lx;
-            ordered[i * 3 + 1] = ly;
-            ordered[i * 3 + 2] = lz;
+          } else {
+            for (let i = 0; i < write; i++) {
+              const src = (write - 1 - i) * 3; // reverse: oldest first
+              ordered[i * 3] = kept[src];
+              ordered[i * 3 + 1] = kept[src + 1];
+              ordered[i * 3 + 2] = kept[src + 2];
+            }
           }
           trailGeo.attributes.position.array.set(ordered);
           trailGeo.setDrawRange(0, write);
