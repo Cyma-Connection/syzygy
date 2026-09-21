@@ -6,7 +6,7 @@ const STR = {
   en: {
     loadmsg: 'calibrating ORBIT…',
     startTitle: 'ORBIT SNAP',
-    startBody: 'Your craft orbits alone. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. Collect <b style="color:var(--good)">FIX</b> kits (3 → repair +1 hull). 4 relic SNAPs → <b style="color:var(--amber)">SNAP portal</b> into the <b style="color:var(--cold)">Alternate worlds</b>. Pinch / wheel = zoom.',
+    startBody: 'Your craft orbits alone around the sun, getting faster and faster. <b style="color:var(--amber)">Feel</b> sun→object alignment, then <b style="color:var(--amber)">SNAP</b>. Debris = danger. Collect <b style="color:var(--good)">FIX</b> kits (3 → repair +1 hull) — desktop: <b style="color:var(--good)">Space</b> = FIX. 4 relic SNAPs → <b style="color:var(--amber)">SNAP portal</b> into the <b style="color:var(--cold)">Alternate worlds</b>. Pinch / wheel = zoom.',
     play: 'PLAY',
     leaderboard: 'LEADERBOARD',
     ranks: 'RANKS',
@@ -67,7 +67,7 @@ const STR = {
   fr: {
     loadmsg: 'calibration ORBIT…',
     startTitle: 'ORBIT SNAP',
-    startBody: 'Votre vaisseau orbite seul. <b style="color:var(--amber)">Sentez</b> l’alignement Soleil–Objet puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. Collectez des kits <b style="color:var(--good)">FIX</b> (3 → +1 coque). 4 SNAPs relic → <b style="color:var(--amber)">SNAP portail</b> vers les <b style="color:var(--cold)">Mondes alternatifs</b>. Pinch / molette = zoom.',
+    startBody: 'Votre vaisseau orbite de plus en plus vite seul autour du soleil. <b style="color:var(--amber)">Sentez</b> l’alignement Soleil–Objet puis <b style="color:var(--amber)">SNAP</b>. Débris = danger. Collectez des kits <b style="color:var(--good)">FIX</b> (3 → +1 coque) — ordi : <b style="color:var(--good)">Espace</b> = FIX. 4 SNAPs relic → <b style="color:var(--amber)">SNAP portail</b> vers les <b style="color:var(--cold)">Mondes alternatifs</b>. Pinch / molette = zoom.',
     play: 'JOUER',
     leaderboard: 'CLASSEMENT',
     ranks: 'RANGS',
@@ -128,7 +128,7 @@ const STR = {
   es: {
     loadmsg: 'calibrando ÓRBITA…',
     startTitle: 'ORBIT SNAP',
-    startBody: 'Tu nave orbita sola. <b style="color:var(--amber)">Siente</b> la alineación sol→objeto, luego <b style="color:var(--amber)">SNAP</b>. Escombros = peligro. Recoge kits <b style="color:var(--good)">FIX</b> (3 → +1 casco). 4 SNAPs relic → <b style="color:var(--amber)">SNAP portal</b> a los <b style="color:var(--cold)">Mundos alternativos</b>. Pellizca / rueda = zoom.',
+    startBody: 'Tu nave orbita sola alrededor del sol, cada vez más rápido. <b style="color:var(--amber)">Siente</b> la alineación sol→objeto, luego <b style="color:var(--amber)">SNAP</b>. Escombros = peligro. Recoge kits <b style="color:var(--good)">FIX</b> (3 → +1 casco) — PC: <b style="color:var(--good)">Espacio</b> = FIX. 4 SNAPs relic → <b style="color:var(--amber)">SNAP portal</b> a los <b style="color:var(--cold)">Mundos alternativos</b>. Pellizca / rueda = zoom.',
     play: 'JUGAR',
     leaderboard: 'CLASIFICACIÓN',
     ranks: 'RANGOS',
