@@ -31,6 +31,9 @@
 ## Jam rules / telemetry
 Respect 404 geometry recipe (code modules only for 3D). Expose `__READY__`, `__START__`, `__GAME__` (fps from real dt, pos in metres, draws/tris). Relative paths; public Pages URL.
 
+## Submission path
+Fork `404-game-jam`, add `entries/syzygy.json`, then paste the verdict from `jam.mjs` into `entries/syzygy.VERDICT.md` before depositing.
+
 ## Screenshots
 Placeholders (add before final deposit):
 - [ ] Orbit SNAP hot window  
