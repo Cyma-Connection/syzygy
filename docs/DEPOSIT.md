@@ -35,10 +35,11 @@ Respect 404 geometry recipe (code modules only for 3D). Expose `__READY__`, `__S
 Fork `404-game-jam`, add `entries/syzygy.json`, then paste the verdict from `jam.mjs` into `entries/syzygy.VERDICT.md` before depositing.
 
 ## Screenshots
-Placeholders (add before final deposit):
-- [ ] Orbit SNAP hot window  
-- [ ] Bonus portal / tier look  
-- [ ] Mobile one-thumb HUD  
+Phone portrait captures (Jam dossier, optional for organizers):
+
+- [x] Orbit SNAP / alignment — `docs/screenshots/01-syzygy-alignment.jpeg`
+- [x] Bonus ALT WORLDS — `docs/screenshots/02-alt-worlds-perfect.jpeg`
+- [x] Mobile one-thumb HUD — `docs/screenshots/03-hud-wave3-good.jpeg`
 
 ## Out of scope (locked)
 No black-hole DODGE return. LOCK does not open bonus. Bonus entry = SNAP portal only.
