@@ -8,10 +8,10 @@
 ---
 
 ## Pitch court (FR) — recommandé
-**SYZYGY ORBIT SNAP** — dernier cartographe d’un orrery mort. Votre craft orbite seul autour d’un soleil mourant : **sentez** l’alignement Soleil→Objet, puis **SNAP**. Débris = danger. Combos, vagues, **LOCK** (gel d’alignement), portail bonus après 4 reliques. Arcade addictive, esthétique laiton / obsidienne / ambre+froid.
+**SYZYGY ORBIT SNAP** — dernier cartographe d’un orrery mort. Votre craft orbite seul autour d’un soleil mourant : **sentez** l’alignement Soleil→Objet, puis **SNAP**. Débris = danger. Combos, vagues, **HEAT** / kits **FIX**, portail bonus après 4 reliques. Arcade addictive, esthétique laiton / obsidienne / ambre+froid.
 
 ## Short pitch (EN)
-**SYZYGY ORBIT SNAP** — last cartographer of a dead orrery. Your craft auto-orbits a dying sun: **feel** sun→object alignment, then **SNAP**. Debris hurts. Combos, waves, **LOCK** (brief align freeze), portal bonus after 4 relics. Arcade-addictive; brass/obsidian; amber + cold — not neon cyberpunk.
+**SYZYGY ORBIT SNAP** — last cartographer of a dead orrery. Your craft auto-orbits a dying sun: **feel** sun→object alignment, then **SNAP**. Debris hurts. Combos, waves, **HEAT** / **FIX** kits, portal bonus after 4 relics. Arcade-addictive; brass/obsidian; amber + cold — not neon cyberpunk.
 
 ---
 
@@ -20,11 +20,11 @@
 2. Tap **SNAP** on Perfect / Good / OK. Avoid **debris**.
 3. Clear 5 snaps per wave; sun grows; difficulty ramps (gentle early, clearer after wave 5–8).
 4. **4 relic SNAPs** → geometric **portal** appears → **SNAP portal** = 30s bonus orbs (tiers stack each entry).
-5. **3 Perfect** → **LOCK** charged → tap LOCK or press **Space** = ~0.6s alignment freeze (soft-lock toward best non-debris). Does **not** open bonus.
+5. **3 Perfect** → **HEAT x2** while the streak holds. Collect **FIX** kits → at 3/3, tap **FIX** or press **Space** = repair +1 hull. Does **not** open bonus (portal SNAP does).
 
 ## Controls
 - **SNAP** — primary thumb button  
-- **LOCK** / **Space** (desktop) — align freeze when charged  
+- **FIX** / **Space** (desktop) — repair +1 hull when 3 kits charged  
 - **Pinch** / mouse **wheel** — zoom  
 - Mute + language chips (EN / FR / ES)
 
@@ -42,4 +42,4 @@ Phone portrait captures (Jam dossier, optional for organizers):
 - [x] Mobile one-thumb HUD — `docs/screenshots/03-hud-wave3-good.jpeg`
 
 ## Out of scope (locked)
-No black-hole DODGE return. LOCK does not open bonus. Bonus entry = SNAP portal only.
+No black-hole DODGE return. FIX / HEAT do not open bonus. Bonus entry = SNAP portal only.

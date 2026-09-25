@@ -3,13 +3,13 @@
  * Auto-orbit craft; feel alignment; SNAP through the dying sun.
  */
 import * as THREE from 'three';
-import { ASSET } from './assetlib.js?v=sil1';
-import { createSpaceAudio } from './audio.js?v=sil1';
-import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=sil1';
-import { createVfx } from './vfx.js?v=sil1';
-import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=sil1';
-import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=sil1';
-import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=sil1';
+import { ASSET } from './assetlib.js?v=rio1';
+import { createSpaceAudio } from './audio.js?v=rio1';
+import { createSpaceBackdrop, createSunGlow, growSun } from './spacefx.js?v=rio1';
+import { createVfx } from './vfx.js?v=rio1';
+import { createPlanet, createStar, createDebris, createPortal, createBonusPlanet, createBonusOrb, createRelicMark, getBonusTierPalette, createKit } from './objects.js?v=rio1';
+import { loadLocal, saveLocal, submitGlobal } from './leaderboard.js?v=rio1';
+import { t, applyDom, toggleLang, setLang, setDiff, getDiff, coachScreens, getLang } from './i18n.js?v=rio1';
 
 const AMBER = 0xe8a04a;
 const COLD = 0x6b8cff;
@@ -194,6 +194,8 @@ function bonusOrbMult() {
 
 function perfectBand(w) { return Math.max(0.88, 0.96 - w * 0.005); }
 function goodBand(w) { return Math.max(0.70, 0.88 - w * 0.01); }
+/** Shared GOOD threshold: same wave index as doSnap scoring (Pro +6). */
+function gradeBand() { return goodBand(scoreWave()); }
 
 function updateHud() {
   const need = waveParams(wave).perWave;
@@ -215,7 +217,7 @@ function updateHud() {
   const btn = $('snapBtn');
   if (btn) {
     const safeKind = bestTarget && bestTarget.kind !== KIND.DEBRIS;
-    const hot = align >= goodBand(wave) && safeKind;
+    const hot = align >= gradeBand() && safeKind;
     const danger = align >= 0.55 && bestTarget && bestTarget.kind === KIND.DEBRIS;
     const near = align >= 0.5 && !hot && !danger;
     btn.classList.toggle('hot', hot);
@@ -548,7 +550,7 @@ function updateSyzygyGuide() {
     mat.color.setHex(BAD);
     mat.opacity = 0.18 + a * 0.5;
   } else if (a > 0.45) {
-    mat.color.setHex(a >= goodBand(wave) ? AMBER : COLD);
+    mat.color.setHex(a >= gradeBand() ? AMBER : COLD);
     mat.opacity = 0.14 + (a - 0.45) * 0.85;
   } else {
     mat.opacity = Math.max(0.03, a * 0.1);
@@ -1703,7 +1705,7 @@ function tickBot() {
   computeAlignment();
   if (!bestTarget) return;
   if (bestTarget.kind === KIND.DEBRIS) return;
-  if (align >= goodBand(wave)) doSnap();
+  if (align >= gradeBand()) doSnap();
   // Bot: spend FIX when charged and hull damaged
   if (kits >= KIT_NEED && lives < MAX_LIVES) {
     activateFix();

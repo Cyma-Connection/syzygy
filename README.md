@@ -8,7 +8,7 @@ https://cyma-connection.github.io/syzygy/
 Or serve this folder over HTTP and open `index.html`.
 
 ## Pitch (EN)
-Last cartographer of a dead orrery: soft-lock the dying sun’s relics into syzygy and SNAP. Arcade urgency, brass/obsidian beauty — Angry Birds clarity meets Subway Surfers pace.
+Last cartographer of a dead orrery: align the dying sun’s relics into syzygy and SNAP. Arcade urgency, brass/obsidian beauty — Angry Birds clarity meets Subway Surfers pace.
 
 ## Pitch (FR)
 Dernier cartographe d’un orrery mort : alignez soleils et reliques en **syzygie**, puis **SNAP**. Urgence arcade, esthétique laiton/obsidienne — clarté Angry Birds, rythme Subway Surfers.
@@ -18,13 +18,13 @@ Dernier cartographe d’un orrery mort : alignez soleils et reliques en **syzygi
 2. **SNAP** at the sweet spot (Perfect / Good / OK). Debris = lose a life.
 3. Clear waves, stack combos, grow the sun. 5 hull lives.
 4. **4 relic SNAPs** open a **portal** — SNAP the portal to enter a **30s bonus** stage (orbs). Each bonus entry in a run raises **bonus tier** (more points, slightly harder, new look).
-5. **3 Perfect** in a row charge **LOCK** — brief **alignment freeze** (~0.6s): craft soft-locks toward the best non-debris syzygy. LOCK does **not** open the bonus.
+5. **3 Perfect** in a row activate **HEAT x2** (score multiplier while the streak holds). Collect green **FIX** kits in the field; at 3/3, tap **FIX** (desktop **Space**) to repair +1 hull.
 
 ## Controls
 | Input | Action |
 |---|---|
 | **SNAP** (big button) | Commit alignment |
-| **LOCK** / Desktop **Space** | Align freeze (~0.6s) when charged |
+| **FIX** / Desktop **Space** | Repair +1 hull when 3 kits charged |
 | **Pinch** (mobile) / **wheel** | Zoom |
 | Corner **♪** | Mute |
 | Corner **EN/FR/ES** | Language |
